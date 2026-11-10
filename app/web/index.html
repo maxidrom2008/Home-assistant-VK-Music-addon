@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VK Music — настройки</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#111827;color:#eef2ff}
+body{margin:0;padding:28px 16px}.wrap{max-width:680px;margin:0 auto}
+.panel{background:#1f2937;border:1px solid #374151;border-radius:16px;padding:24px}
+h1{font-size:25px;margin:0 0 8px}.muted{color:#9ca3af;line-height:1.5}
+.status{margin:18px 0;padding:12px 14px;border-radius:10px;background:#111827;border:1px solid #374151}
+label{display:block;margin:16px 0 6px;font-weight:600}
+input{box-sizing:border-box;width:100%;border:1px solid #4b5563;border-radius:9px;background:#111827;color:#fff;padding:12px;font-size:16px}
+button{border:0;border-radius:9px;padding:12px 16px;font-size:15px;font-weight:650;cursor:pointer;margin:16px 8px 0 0;background:#2563eb;color:#fff}
+button.secondary{background:#374151}button.danger{background:#991b1b}
+button:disabled{opacity:.5;cursor:wait}#challenge{display:none;margin-top:18px;padding-top:16px;border-top:1px solid #374151}
+#captcha{max-width:100%;display:block;margin:12px 0;border-radius:8px;background:#fff}
+.msg{white-space:pre-wrap;margin-top:12px;color:#fca5a5}.ok{color:#86efac}
+small{display:block;color:#9ca3af;margin-top:10px}
+</style>
+</head>
+<body><main class="wrap"><section class="panel">
+<h1>VK Music Server</h1>
+<p class="muted">Подключение аккаунта VK. Пароль и проверочные коды используются только во время входа и не записываются в постоянное хранилище.</p>
+<div id="status" class="status">Проверка состояния…</div>
+<form id="login">
+<label for="loginName">Телефон или email VK</label>
+<input id="loginName" autocomplete="username" required>
+<label for="password">Пароль VK</label>
+<input id="password" type="password" autocomplete="current-password" required>
+<button id="loginButton" type="submit">Подключить VK</button>
+</form>
+<section id="challenge">
+<h2 id="challengeTitle">Подтверждение VK</h2>
+<p id="challengeHint" class="muted"></p>
+<img id="captcha" alt="CAPTCHA VK" hidden>
+<label id="answerLabel" for="answer">Код подтверждения</label>
+<input id="answer" autocomplete="one-time-code">
+<button id="answerButton" type="button">Отправить</button>
+<button id="cancelButton" class="secondary" type="button">Отменить вход</button>
+</section>
+<div id="message" class="msg" role="status"></div>
+<div id="connectedActions" hidden>
+<button id="deleteButton" class="danger" type="button">Отключить VK и удалить сохранённый токен</button>
+<small>Сервер хранит токен в папке /data и не удаляет его по таймеру. VK всё ещё может самостоятельно отозвать или ограничить токен.</small>
+</div>
+</section></main>
+<script>
+const api = p => new URL("api/v1/" + p, document.baseURI).toString();
+const $ = id => document.getElementById(id);
+let challengeId = null;
+async function call(path, options={}) {
+  const response = await fetch(api(path), {headers:{"Content-Type":"application/json"}, ...options});
+  const data = await response.json().catch(()=>({detail:"Некорректный ответ сервера"}));
+  if (!response.ok) throw new Error(data.detail || ("HTTP " + response.status));
+  return data;
+}
+async function refreshStatus() {
+  try {
+    const s = await call("auth/status");
+    if (s.authenticated) {
+      $("status").textContent = "VK подключён" + (s.user_id ? " · ID " + s.user_id : "") + (s.updated_at ? " · сохранён " + s.updated_at : "");
+      $("status").className = "status ok";
+      $("login").hidden = true;
+      $("connectedActions").hidden = false;
+    } else if (s.token_saved) {
+      $("status").textContent = "Токен сохранён, но VK его не принимает. Подключите аккаунт заново или удалите токен.";
+      $("login").hidden = false;
+      $("connectedActions").hidden = false;
+    } else {
+      $("status").textContent = "VK не подключён";
+      $("login").hidden = false;
+      $("connectedActions").hidden = true;
+    }
+  } catch(e) {$("status").textContent = "Ошибка проверки: " + e.message;}
+}
+function showChallenge(data) {
+  challengeId = data.challenge_id;
+  const c = data.challenge || {};
+  $("challenge").style.display = "block";
+  $("challengeTitle").textContent = c.type === "captcha" ? "CAPTCHA VK" : "Подтверждение входа";
+  $("challengeHint").textContent = c.hint || c.phone_mask || c.label || "";
+  $("answerLabel").textContent = c.label || "Код подтверждения";
+  $("captcha").hidden = c.type !== "captcha" || !c.image;
+  if (!$("captcha").hidden) $("captcha").src = c.image;
+  $("answer").value = "";
+  $("message").textContent = data.error || "";
+  $("answer").focus();
+}
+$("login").addEventListener("submit", async e => {
+  e.preventDefault();
+  $("loginButton").disabled = true;
+  $("message").textContent = "";
+  try {
+    const data = await call("auth/start", {method:"POST",body:JSON.stringify({login:$("loginName").value,password:$("password").value})});
+    $("password").value = "";
+    if (data.state === "challenge_required") showChallenge(data);
+    else { $("challenge").style.display="none"; await refreshStatus(); $("message").textContent="VK успешно подключён."; $("message").className="msg ok"; }
+  } catch(err) {$("password").value=""; $("message").textContent=err.message;}
+  finally {$("loginButton").disabled=false;}
+});
+$("answerButton").addEventListener("click", async () => {
+  if (!challengeId) return;
+  $("answerButton").disabled = true;
+  try {
+    const data = await call("auth/challenge",{method:"POST",body:JSON.stringify({challenge_id:challengeId,answer:$("answer").value})});
+    if (data.state === "challenge_required") showChallenge(data);
+    else {challengeId=null;$("challenge").style.display="none";await refreshStatus();$("message").textContent="VK успешно подключён.";$("message").className="msg ok";}
+  } catch(err) {$("message").textContent=err.message;}
+  finally {$("answerButton").disabled=false;}
+});
+$("cancelButton").addEventListener("click",async()=>{
+  if(challengeId) { try { await call("auth/challenge/"+encodeURIComponent(challengeId),{method:"DELETE"}); } catch(e) {} }
+  challengeId=null;$("challenge").style.display="none";$("message").textContent="Вход отменён.";
+});
+$("deleteButton").addEventListener("click",async()=>{
+  if(!confirm("Удалить сохранённый токен VK из данных add-on?"))return;
+  $("deleteButton").disabled=true;
+  try {
+    await call("auth/token",{method:"DELETE"});
+    await refreshStatus();
+    $("message").textContent="Токен удалён. Для доступа к музыке подключите VK заново.";
+    $("message").className="msg ok";
+  } catch(err) {$("message").textContent=err.message;}
+  finally {$("deleteButton").disabled=false;}
+});
+refreshStatus();
+</script></body></html>
