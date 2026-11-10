@@ -41,7 +41,7 @@ The internal URL is not published on a host port. The add-on allows API access f
 
 Open **VK Music** from the Home Assistant sidebar (or open the add-on's Ingress page). Enter your VK phone/email and password. Complete the CAPTCHA or verification challenge if VK asks for one.
 
-Only the final access token and its User-Agent are persisted. Passwords and one-time verification data are held in memory during login and are not written to SQLite. In-memory login sessions expire after ten minutes and are cleared on cancellation, replacement, failure or success.
+Only the final access token and its User-Agent are persisted. Passwords and one-time verification data are held in memory during login and are not written to SQLite. In-memory login sessions are automatically removed after ten minutes and are also cleared on cancellation, replacement, failure or success.
 
 When connected, the page shows the VK user ID and the time the token was saved. Use **Отключить VK и удалить сохранённый токен** to delete the saved token from add-on storage. The endpoint DELETE /api/v1/auth/token does the same.
 
@@ -78,7 +78,7 @@ Direct host-port publishing is intentionally disabled. API access is limited to 
 ## Current limits
 
 - The web panel includes personal-library browsing, playlist browsing and track playback, search, pagination, and browser playback through the server-side stream proxy. Playlist access keys stay inside the server. The browser JavaScript is checked in CI.
-- A companion Home Assistant `media_player` integration is included in `custom_components/vk_music_server`; install it through HACS as a custom integration. A native mobile app is still a separate roadmap task.
+- A companion Home Assistant `media_player` integration is included in `custom_components/vk_music_server`; it can be installed manually as described above. A native mobile app is still a separate roadmap task.
 - Server-side playback uses FFmpeg and the Home Assistant shared PulseAudio service. Select an output device in the add-on Audio settings; actual sound output depends on HAOS exposing a working sink.
 - VK audio availability depends on the account and VK's API access rules. CAPTCHA appearance is controlled by VK.
 

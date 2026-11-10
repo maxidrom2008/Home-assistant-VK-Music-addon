@@ -11,6 +11,7 @@ from app.vk.auth import (
     build_auth_request,
     challenge_view,
     validate_browser_captcha_link,
+    validate_legacy_captcha_image,
 )
 
 
@@ -265,3 +266,78 @@ def test_device_approval_can_continue_without_an_otp_code(
         assert persisted == ["durable-token"]
 
     asyncio.run(scenario())
+
+
+
+def test_legacy_captcha_image_requires_https_vk_host() -> None:
+    url = "https://api.vk.com/captcha.php?sid=123"
+    assert validate_legacy_captcha_image(url) == url
+    for value in (
+        "http://api.vk.com/captcha.php?sid=123",
+        "https://evil.example/captcha.php?sid=123",
+        "https://api.vk.com.evil.example/captcha.php?sid=123",
+        "https://api.vk.com/not-an-image?sid=123",
+    ):
+        with pytest.raises(ValueError):
+            validate_legacy_captcha_image(value)
+
+
+def test_untrusted_legacy_captcha_image_is_not_returned_to_browser() -> None:
+    view = challenge_view(
+        {
+            "error": "need_captcha",
+            "captcha_sid": "sid-123",
+            "captcha_img": "https://evil.example/captcha.php?sid=sid-123",
+        },
+        "challenge-id-that-is-long-enough",
+    )
+    assert view["challenge"]["type"] == "unsupported_captcha"
+    assert "image" not in view["challenge"]
+
+
+def test_pending_auth_session_is_expired_automatically_and_removed(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(auth, "PENDING_TTL_SECONDS", 0.03)
+
+    async def fake_request_vk_token(login: str, password: str, **kwargs) -> str:
+        raise VKAuthChallenge(
+            {"error": "need_captcha", "redirect_uri": CAPTCHA_LINK_1}
+        )
+
+    monkeypatch.setattr(auth, "request_vk_token", fake_request_vk_token)
+
+    async def scenario():
+        manager = VKAuthManager(tmp_path / "vk.sqlite3")
+        challenge = await manager.start("user@example.invalid", "temporary-test-password")
+        challenge_id = challenge["challenge_id"]
+        assert challenge_id in manager.pending
+        await asyncio.sleep(0.08)
+        assert challenge_id not in manager.pending
+        assert challenge_id not in manager._expiry_handles
+        with pytest.raises(ValueError, match="истёк"):
+            await manager.submit(challenge_id, "answer")
+
+    asyncio.run(scenario())
+
+
+def test_cancelled_pending_session_cancels_expiry_timer(tmp_path: Path) -> None:
+    async def fake_request_vk_token(login: str, password: str, **kwargs) -> str:
+        raise VKAuthChallenge(
+            {"error": "need_captcha", "redirect_uri": CAPTCHA_LINK_1}
+        )
+
+    original = auth.request_vk_token
+    auth.request_vk_token = fake_request_vk_token
+    try:
+        async def scenario():
+            manager = VKAuthManager(tmp_path / "vk.sqlite3")
+            challenge = await manager.start("user@example.invalid", "temporary-test-password")
+            challenge_id = challenge["challenge_id"]
+            assert manager.cancel(challenge_id) is True
+            assert challenge_id not in manager.pending
+            assert challenge_id not in manager._expiry_handles
+        asyncio.run(scenario())
+    finally:
+        auth.request_vk_token = original

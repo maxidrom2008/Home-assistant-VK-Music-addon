@@ -1,6 +1,7 @@
 """Interactive VK authorization with image and browser CAPTCHA support."""
 from __future__ import annotations
 
+import asyncio
 import secrets
 import time
 from typing import Any
@@ -14,6 +15,7 @@ from app.storage.database import save_credentials
 PENDING_TTL_SECONDS = 10 * 60
 MAX_CAPTCHA_REFRESHES = 3
 _ALLOWED_CAPTCHA_HOSTS = {"id.vk.com", "id.vk.ru"}
+_ALLOWED_CAPTCHA_IMAGE_HOSTS = {"api.vk.com", "vk.com", "login.vk.com", "id.vk.com", "id.vk.ru"}
 
 
 class VKAuthChallenge(Exception):
@@ -47,6 +49,28 @@ def validate_browser_captcha_link(value: Any) -> str:
         or not parsed.query
     ):
         raise ValueError("VK returned an unsupported CAPTCHA link")
+    return value
+
+
+def validate_legacy_captcha_image(value: Any) -> str:
+    """Accept only HTTPS CAPTCHA images hosted by VK."""
+    if not isinstance(value, str) or not value or len(value) > 4096:
+        raise ValueError("VK returned an invalid CAPTCHA image URL")
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("VK returned an invalid CAPTCHA image URL") from exc
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname not in _ALLOWED_CAPTCHA_IMAGE_HOSTS
+        or port not in (None, 443)
+        or parsed.username is not None
+        or parsed.password is not None
+        or not parsed.path.endswith(("/captcha.php", "/captcha"))
+        or not parsed.query
+    ):
+        raise ValueError("VK returned an unsupported CAPTCHA image URL")
     return value
 
 
@@ -145,11 +169,20 @@ def challenge_view(
                     "hint": "Ссылка одноразовая. Завершите проверку и сразу нажмите «Проверить и продолжить».",
                 }
         elif details.get("captcha_sid") and details.get("captcha_img"):
-            challenge = {
-                "type": "captcha",
-                "image": details.get("captcha_img"),
-                "label": "Введите символы с изображения VK",
-            }
+            try:
+                image_url = validate_legacy_captcha_image(details.get("captcha_img"))
+            except ValueError:
+                challenge = {
+                    "type": "unsupported_captcha",
+                    "label": "VK прислал изображение CAPTCHA с неизвестного адреса.",
+                    "hint": "В целях безопасности изображение не загружено. Начните вход заново или используйте ручное подключение токена.",
+                }
+            else:
+                challenge = {
+                    "type": "captcha",
+                    "image": image_url,
+                    "label": "Введите символы с изображения VK",
+                }
         else:
             challenge = {
                 "type": "unsupported_captcha",
@@ -199,8 +232,12 @@ class VKAuthManager:
     def __init__(self, database_path) -> None:
         self.database_path = database_path
         self.pending: dict[str, dict[str, Any]] = {}
+        self._expiry_handles: dict[str, asyncio.TimerHandle] = {}
 
     def _discard(self, challenge_id: str) -> None:
+        expiry = self._expiry_handles.pop(challenge_id, None)
+        if expiry is not None:
+            expiry.cancel()
         session = self.pending.pop(challenge_id, None)
         if session:
             for key in self._SENSITIVE_FIELDS:
@@ -238,6 +275,10 @@ class VKAuthManager:
             "requested_sid": None,
             "created_at": time.monotonic(),
         }
+        loop = asyncio.get_running_loop()
+        self._expiry_handles[challenge_id] = loop.call_later(
+            PENDING_TTL_SECONDS, self._discard, challenge_id
+        )
         return await self._attempt(challenge_id)
 
     async def submit(
@@ -335,8 +376,13 @@ class VKAuthManager:
                         session["captcha_kind"] = "unsupported"
                         session["captcha_redirect_uri"] = None
                 elif details.get("captcha_sid") and details.get("captcha_img"):
-                    session["captcha_kind"] = "image"
-                    session["captcha_sid"] = str(details["captcha_sid"])
+                    try:
+                        validate_legacy_captcha_image(details.get("captcha_img"))
+                    except ValueError:
+                        session["captcha_kind"] = "unsupported"
+                    else:
+                        session["captcha_kind"] = "image"
+                        session["captcha_sid"] = str(details["captcha_sid"])
                 else:
                     session["captcha_kind"] = "unsupported"
                 return challenge_view(details, challenge_id)
