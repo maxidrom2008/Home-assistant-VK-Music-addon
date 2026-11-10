@@ -19,7 +19,7 @@ This checkpoint adds:
 
 Open **VK Music** from the Home Assistant sidebar (or open the add-on's Ingress page). Enter your VK phone/email and password. Complete CAPTCHA or the verification challenge if VK asks for one.
 
-Only the final access token and its User-Agent are persisted. The password and one-time verification data are held in memory during the login flow and are not written to SQLite.
+Only the final access token and its User-Agent are persisted. The password and one-time verification data are held in memory during the login flow and are not written to SQLite. If VK requires a browser-only CAPTCHA, the panel also accepts a manually obtained access token and validates it before saving.
 
 When connected, the page shows the VK user ID and the time the token was saved. Use **Отключить VK и удалить сохранённый токен** to delete the saved token from add-on storage. The endpoint `DELETE /api/v1/auth/token` does the same.
 
@@ -34,6 +34,7 @@ All application endpoints are available through Home Assistant Ingress:
 - `GET /api/v1/auth/status`
 - `POST /api/v1/auth/start` — JSON: `{"login":"...","password":"..."}`
 - `POST /api/v1/auth/challenge` — JSON: `{"challenge_id":"...","answer":"..."}`
+- `POST /api/v1/auth/token` — JSON: `{"access_token":"..."}` (validates and stores an existing token)
 - `DELETE /api/v1/auth/challenge/{challenge_id}` — discard an unfinished login
 - `DELETE /api/v1/auth/token`
 - `GET /api/v1/library/tracks?limit=50&offset=0`
