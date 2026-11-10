@@ -5,13 +5,16 @@ Passwords, CAPTCHA answers and one-time codes are never written to disk.
 """
 import os
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
+from collections.abc import Iterator
 from typing import Any
 
 SCHEMA_VERSION = 2
 
 
-def connect(path: Path) -> sqlite3.Connection:
+@contextmanager
+def connect(path: Path) -> Iterator[sqlite3.Connection]:
     path.parent.mkdir(parents=True, exist_ok=True)
     old_umask = os.umask(0o077)
     try:
@@ -25,7 +28,15 @@ def connect(path: Path) -> sqlite3.Connection:
         path.chmod(0o600)
     except OSError:
         pass
-    return db
+    try:
+        yield db
+    except Exception:
+        db.rollback()
+        raise
+    else:
+        db.commit()
+    finally:
+        db.close()
 
 
 def initialize(path: Path) -> None:
@@ -71,4 +82,9 @@ def delete_credentials(path: Path) -> bool:
         return False
     with connect(path) as db:
         cursor = db.execute("DELETE FROM vk_credentials WHERE id=1")
-    return cursor.rowcount > 0
+        deleted = cursor.rowcount > 0
+    # Checkpoint and compact the DB so removed records are not left in its WAL.
+    with connect(path) as db:
+        db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        db.execute("VACUUM")
+    return deleted
