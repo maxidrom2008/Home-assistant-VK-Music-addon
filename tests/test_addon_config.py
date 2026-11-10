@@ -11,5 +11,5 @@ def test_addon_manifest_uses_persistent_data_and_ingress_only() -> None:
     assert manifest["ingress_port"] == 8099
     assert "aarch64" in manifest["arch"]
     assert "amd64" in manifest["arch"]
-    assert {"data": "rw"} in manifest["map"]
+    assert "data:rw" in manifest["map"]
     assert "ports" not in manifest
