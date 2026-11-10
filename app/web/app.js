@@ -10,6 +10,7 @@ let currentMode = "library";
 let hasMoreTracks = false;
 let loadSequence = 0;
 let currentTrackIndex = -1;
+let outputMode = "browser";
 
 async function call(path, options={}) {
   const response = await fetch(api(path), {headers:{"Content-Type":"application/json"}, ...options});
@@ -137,12 +138,73 @@ async function playTrack(index) {
   if (!track || !track.id) return;
   currentTrackIndex = index;
   $("nowPlaying").textContent = (track.artist ? track.artist + " — " : "") + (track.title || "Без названия");
+  if (outputMode === "server") {
+    $("audio").pause();
+    $("audio").removeAttribute("src");
+    try {
+      const state = await call("playback/server/play", {
+        method:"POST",
+        body:JSON.stringify({track_id:track.id})
+      });
+      $("outputStatus").textContent = state.state === "playing"
+        ? "Играет через HAOS · " + (state.output || "PulseAudio")
+        : (state.error || "Серверный вывод не начал воспроизведение");
+      $("libraryMessage").textContent = state.state === "playing"
+        ? "Серверное воспроизведение запущено."
+        : "Сервер не смог начать воспроизведение.";
+    } catch (err) {
+      $("libraryMessage").textContent = err.message;
+      $("outputStatus").textContent = "Серверный вывод недоступен. Проверьте аудиовыход add-on.";
+    }
+    return;
+  }
   const audio = $("audio");
   audio.src = api("tracks/" + encodeURIComponent(track.id) + "/stream");
   try {
     await audio.play();
+    $("outputStatus").textContent = "Воспроизведение в этом браузере";
   } catch (err) {
     $("libraryMessage").textContent = "Не удалось начать воспроизведение: " + (err.message || String(err));
+  }
+}
+async function setOutputMode(mode) {
+  outputMode = mode;
+  $("browserOutput").className = mode === "browser" ? "" : "secondary";
+  $("serverOutput").className = mode === "server" ? "" : "secondary";
+  $("audio").hidden = mode === "server";
+  $("serverPause").hidden = mode !== "server";
+  $("serverResume").hidden = mode !== "server";
+  $("serverStop").hidden = mode !== "server";
+  if (mode === "server") {
+    $("audio").pause();
+    $("outputStatus").textContent = "Следующий выбранный трек будет играть через аудиовыход HAOS.";
+    try {
+      const state = await call("playback/state");
+      if (state.state === "error") $("outputStatus").textContent = state.error || "Ошибка серверного вывода.";
+      else if (state.track) $("nowPlaying").textContent = (state.track.artist ? state.track.artist + " — " : "") + state.track.title;
+    } catch (err) {
+      $("outputStatus").textContent = err.message;
+    }
+  } else {
+    try { await call("playback/server/stop", {method:"POST"}); } catch (e) {}
+    $("outputStatus").textContent = "Воспроизведение в этом браузере";
+  }
+}
+async function serverPlaybackAction(action) {
+  try {
+    const state = await call("playback/server/" + action, {method:"POST"});
+    $("outputStatus").textContent = action === "pause"
+      ? "Серверный плеер на паузе"
+      : action === "resume"
+        ? "Серверный плеер продолжил воспроизведение"
+        : "Серверный плеер остановлен";
+    if (action === "stop") {
+      $("nowPlaying").textContent = "Ничего не воспроизводится";
+      currentTrackIndex = -1;
+    }
+    return state;
+  } catch (err) {
+    $("libraryMessage").textContent = err.message;
   }
 }
 async function playNext() {
@@ -326,6 +388,11 @@ $("searchForm").addEventListener("submit", event => {
 $("loadMore").addEventListener("click", () => loadTracks(currentMode, true));
 $("nextTrack").addEventListener("click", playNext);
 $("previousTrack").addEventListener("click", playPrevious);
+$("browserOutput").addEventListener("click", () => setOutputMode("browser"));
+$("serverOutput").addEventListener("click", () => setOutputMode("server"));
+$("serverPause").addEventListener("click", () => serverPlaybackAction("pause"));
+$("serverResume").addEventListener("click", () => serverPlaybackAction("resume"));
+$("serverStop").addEventListener("click", () => serverPlaybackAction("stop"));
 $("audio").addEventListener("ended", playNext);
 $("audio").addEventListener("error", () => {
   if ($("audio").src) $("libraryMessage").textContent = "VK не смог предоставить поток этого трека. Попробуйте другой трек или повторите позже.";

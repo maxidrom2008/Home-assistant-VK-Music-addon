@@ -53,6 +53,10 @@ All application endpoints are available through Home Assistant Ingress:
 - GET /api/v1/search?q=...&limit=50&offset=0
 - GET /api/v1/tracks/{owner_id}_{track_id}/stream
 - GET /api/v1/playback/state
+- POST /api/v1/playback/server/play — JSON: {"track_id":"owner_id_track_id"}
+- POST /api/v1/playback/server/pause
+- POST /api/v1/playback/server/resume
+- POST /api/v1/playback/server/stop
 - WebSocket: /api/v1/events
 
 Direct host-port publishing is intentionally disabled. This server accepts Home Assistant Ingress traffic and loopback only.
@@ -61,7 +65,7 @@ Direct host-port publishing is intentionally disabled. This server accepts Home 
 
 - The web panel includes personal-library browsing, track search, pagination and browser playback through the server-side stream proxy. The browser JavaScript is checked in CI.
 - A native Home Assistant media_player integration and a mobile app are separate roadmap tasks.
-- Server-side playback to physical audio outputs is not yet implemented. FFmpeg alone is not an audio output device.
+- Server-side playback uses FFmpeg and the Home Assistant shared PulseAudio service. Select an output device in the add-on Audio settings; actual sound output depends on HAOS exposing a working sink.
 - VK audio availability depends on the account and VK's API access rules. CAPTCHA appearance is controlled by VK.
 
 ## Local development
@@ -79,12 +83,12 @@ Run checks:
 
 ## Data and upgrades
 
-The add-on maps /data persistently. Database migrations preserve existing records; do not remove the add-on's data directory when updating. Keep Home Assistant backups. The SQLite file is created with restrictive file permissions where supported. Tokens are secrets: do not share database files or diagnostic backups publicly.
+The add-on maps /data persistently and requests the Home Assistant shared audio service. Choose the output device in the add-on Audio configuration. Database migrations preserve existing records; do not remove the add-on's data directory when updating. Keep Home Assistant backups. The SQLite file is created with restrictive file permissions where supported. Tokens are secrets: do not share database files or diagnostic backups publicly.
 
 ## Playback modes
 
-1. **Client-side stream:** implemented web player and stream proxy supply audio bytes to browsers without exposing the temporary VK CDN URL.
-2. **Server-side playback:** planned output/FFmpeg layer. A dedicated sink/transport implementation and device testing are still required.
+1. **Client-side stream:** the web player and stream proxy supply audio bytes to browsers without exposing the temporary VK CDN URL.
+2. **Server-side playback:** the server resolves the VK track URL internally and runs FFmpeg into the Home Assistant PulseAudio output. Play, pause, resume and stop endpoints are available. Select the desired output in the add-on's Audio settings. Hardware-specific output still needs to be tested on the target HAOS machine.
 
 ## License
 

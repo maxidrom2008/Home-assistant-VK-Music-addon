@@ -9,6 +9,8 @@
 - Add automated tests for the modern CAPTCHA request, challenge lifecycle and device-approval 2FA.
 - Support push/device approval for VK 2FA methods that do not deliver a one-time code.
 - Add a working browser music player with library browsing, search, pagination and next/previous track controls.
+- Add server-side FFmpeg playback through the Supervisor-managed PulseAudio service, with play, pause, resume and stop controls.
+- Enable the Home Assistant add-on audio interface and verify FFmpeg PulseAudio output support during image build.
 
 ## 0.1.1
 - Integrate vkpymusic 4.0.2 for VK authorization and media requests.

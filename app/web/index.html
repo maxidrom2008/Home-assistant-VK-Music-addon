@@ -68,10 +68,18 @@ small{display:block;color:#9ca3af;margin-top:10px}
 <button id="loadMore" class="secondary" type="button">Загрузить ещё</button>
 <div id="player">
   <div id="nowPlaying">Ничего не воспроизводится</div>
+  <div class="toolbar">
+    <button id="browserOutput" type="button">Вывод в браузер</button>
+    <button id="serverOutput" type="button" class="secondary">Вывод через HAOS</button>
+  </div>
   <div class="playerButtons">
     <button id="previousTrack" type="button" class="secondary" aria-label="Предыдущий трек">Назад</button>
     <button id="nextTrack" type="button" class="secondary" aria-label="Следующий трек">Далее</button>
+    <button id="serverPause" type="button" class="secondary" hidden>Пауза сервера</button>
+    <button id="serverResume" type="button" class="secondary" hidden>Продолжить сервер</button>
+    <button id="serverStop" type="button" class="danger" hidden>Остановить сервер</button>
   </div>
+  <p id="outputStatus" class="muted">Воспроизведение в этом браузере</p>
   <audio id="audio" controls preload="none"></audio>
 </div>
 </section>
