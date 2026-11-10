@@ -8,7 +8,7 @@ The authorization flow supports both CAPTCHA formats currently returned by VK:
 
 - **Browser CAPTCHA (VK ID):** the server passes VK's redirect_uri to the pinned @vkid/captcha 2.0.0 browser widget. The user completes the real VK challenge in the Home Assistant panel; the widget returns success_token, which is immediately submitted with the original pending login request.
 - **Legacy image CAPTCHA:** the server displays captcha_img and sends the entered answer as captcha_sid / captcha_key.
-- **2FA:** SMS, app code and the last four digits of a verification call are supported; VK chooses the verification channel.
+- **2FA:** SMS, app code, the last four digits of a verification call, and supported push/device approval are handled; VK chooses the verification channel.
 
 Browser CAPTCHA links are one-use and short-lived. The panel can request a fresh link if a challenge expires or the browser tab was suspended. Links are only accepted from the HTTPS VK ID hosts id.vk.com and id.vk.ru; arbitrary redirect URLs are not opened. The app does not use Selenium, headless browsers, automatic solvers or CAPTCHA bypasses.
 
@@ -43,11 +43,11 @@ All application endpoints are available through Home Assistant Ingress:
 - GET /api/v1/status
 - GET /api/v1/auth/status
 - POST /api/v1/auth/start — JSON: {"login":"...","password":"..."}
-- POST /api/v1/auth/challenge — JSON: {"challenge_id":"...","answer":"..."} (a verification code, image CAPTCHA answer or browser CAPTCHA success token)
+- POST /api/v1/auth/challenge — JSON: {"challenge_id":"...","answer":"...","approved":false} (a verification code, image CAPTCHA answer, browser CAPTCHA success token, or `approved: true` after VK/MAX device approval)
 - POST /api/v1/auth/challenge/refresh — JSON: {"challenge_id":"..."} (request a fresh browser CAPTCHA link)
 - POST /api/v1/auth/token — JSON: {"access_token":"..."} (validates and stores an existing token)
 - DELETE /api/v1/auth/challenge/{challenge_id} — discard an unfinished login
-- DELETE /api/v1/auth/token}
+- DELETE /api/v1/auth/token
 - GET /api/v1/library/tracks?limit=50&offset=0
 - GET /api/v1/playlists?limit=50&offset=0
 - GET /api/v1/search?q=...&limit=50&offset=0

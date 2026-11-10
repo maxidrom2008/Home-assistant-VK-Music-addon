@@ -46,6 +46,10 @@ small{display:block;color:#9ca3af;margin-top:10px}
 <img id="captcha" alt="CAPTCHA VK" hidden>
 <label id="answerLabel" for="answer">Код подтверждения</label>
 <input id="answer" autocomplete="one-time-code">
+<label id="approvalOption" hidden style="font-weight:400">
+<input id="approved" type="checkbox" style="width:auto;margin-right:8px">
+Я подтвердил вход в приложении VK/MAX на другом устройстве
+</label>
 <button id="answerButton" type="button">Отправить</button>
 <button id="refreshCaptchaButton" class="secondary" type="button" hidden>Обновить ссылку CAPTCHA</button>
 <button id="cancelButton" class="secondary" type="button">Отменить вход</button>
@@ -122,6 +126,8 @@ async function showChallenge(data) {
   $("answerLabel").hidden = challengeType === "browser_captcha" || challengeType === "unsupported_captcha";
   $("answer").hidden = challengeType === "browser_captcha" || challengeType === "unsupported_captcha";
   $("answer").value = "";
+  $("approved").checked = false;
+  $("approvalOption").hidden = !c.approval_supported || challengeType !== "verification_code";
   $("answerButton").hidden = challengeType === "unsupported_captcha";
   $("answerButton").textContent = challengeType === "browser_captcha" ? "Проверить и продолжить" : "Отправить";
   $("refreshCaptchaButton").hidden = challengeType !== "browser_captcha";
@@ -179,10 +185,22 @@ async function submitChallenge() {
     }
   } else {
     answer = $("answer").value.trim();
-    if (!answer) {
-      $("message").textContent = "Введите ответ на проверку VK.";
+    const approved = $("approved").checked;
+    if (!answer && !approved) {
+      $("message").textContent = "Введите код или подтвердите вход в приложении VK/MAX.";
       return;
     }
+    $("answerButton").disabled = true;
+    try {
+      const data = await call("auth/challenge",{method:"POST",body:JSON.stringify({challenge_id:challengeId,answer,approved})});
+      if (data.state === "challenge_required") await showChallenge(data);
+      else await finishLogin();
+    } catch(err) {
+      $("message").textContent = err.message;
+    } finally {
+      $("answerButton").disabled = false;
+    }
+    return;
   }
 
   $("answerButton").disabled = true;

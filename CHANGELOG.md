@@ -6,7 +6,8 @@
 - Refresh expired/consumed CAPTCHA links instead of retrying stale one-use tokens.
 - Validate CAPTCHA redirect URLs against the VK ID HTTPS host allowlist before returning them to the browser.
 - Expire abandoned in-memory login sessions after 10 minutes and wipe temporary credentials on cancel, replacement, failure and success.
-- Add automated tests for the modern CAPTCHA request and challenge lifecycle.
+- Add automated tests for the modern CAPTCHA request, challenge lifecycle and device-approval 2FA.
+- Support push/device approval for VK 2FA methods that do not deliver a one-time code.
 
 ## 0.1.1
 - Integrate vkpymusic 4.0.2 for VK authorization and media requests.

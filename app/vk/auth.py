@@ -114,6 +114,11 @@ async def request_vk_validation(sid: str) -> None:
         raise VKAuthError(f"VK could not start verification: {message}") from err
 
 
+def _supports_device_approval(validation_type: str) -> bool:
+    value = validation_type.casefold()
+    return any(part in value for part in ("push", "max", "approve", "confirm", "message"))
+
+
 def challenge_view(
     details: dict[str, Any],
     challenge_id: str,
@@ -157,12 +162,18 @@ def challenge_view(
             "2fa_callreset": "Последние четыре цифры номера входящего звонка",
             "2fa_app": "Код из приложения VK",
         }
+        approval_supported = _supports_device_approval(validation)
         challenge = {
             "type": "verification_code",
             "validation_type": validation,
             "phone_mask": details.get("phone_mask"),
             "label": labels.get(validation, "Код подтверждения VK"),
-            "hint": "Введите код подтверждения. Для проверки звонком введите последние четыре цифры номера.",
+            "approval_supported": approval_supported,
+            "hint": (
+                "Введите код или подтвердите вход в приложении VK/MAX на другом устройстве и отметьте это ниже."
+                if approval_supported
+                else "Введите код подтверждения. Для проверки звонком введите последние четыре цифры номера."
+            ),
         }
     return {
         "state": "challenge_required",
@@ -229,23 +240,43 @@ class VKAuthManager:
         }
         return await self._attempt(challenge_id)
 
-    async def submit(self, challenge_id: str, answer: str) -> dict[str, Any]:
+    async def submit(
+        self,
+        challenge_id: str,
+        answer: str,
+        *,
+        approved: bool = False,
+    ) -> dict[str, Any]:
         self._expire_old_sessions()
         session = self.pending.get(challenge_id)
         if not session:
             raise ValueError("Сеанс авторизации истёк. Начните вход заново.")
         value = answer.strip()
-        if not value:
-            raise ValueError("Введите ответ на проверку VK")
         captcha_kind = session.get("captcha_kind")
         if captcha_kind == "browser":
+            if not value:
+                raise ValueError("VK не вернул токен CAPTCHA")
             session["captcha_success_token"] = value
         elif captcha_kind == "image":
+            if not value:
+                raise ValueError("Введите символы с изображения VK")
             session["captcha_answer"] = value
         elif captcha_kind == "unsupported":
             raise ValueError("Эта CAPTCHA не поддерживается. Используйте ручное подключение токена.")
-        else:
+        elif value:
             session["code"] = value
+        elif (
+            approved
+            and session.get("pending_validation")
+            and _supports_device_approval(
+                str(session["pending_validation"].get("validation_type") or "")
+            )
+        ):
+            # Device approval is completed in the VK app; VK must be polled
+            # with the same pending authorization request and no OTP code.
+            session["code"] = None
+        else:
+            raise ValueError("Введите код или подтвердите вход на другом устройстве")
         return await self._attempt(challenge_id)
 
     async def refresh_captcha(self, challenge_id: str) -> dict[str, Any]:

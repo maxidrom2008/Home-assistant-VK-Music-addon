@@ -212,3 +212,56 @@ def test_refresh_expired_browser_captcha_requests_a_new_link(
         assert second["challenge"]["link"] == CAPTCHA_LINK_2
 
     asyncio.run(scenario())
+
+
+def test_device_approval_can_continue_without_an_otp_code(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[dict[str, object]] = []
+    persisted: list[str] = []
+
+    async def fake_request_vk_token(login: str, password: str, **kwargs) -> str:
+        calls.append(kwargs)
+        if len(calls) == 1:
+            raise VKAuthChallenge(
+                {
+                    "error": "need_validation",
+                    "validation_type": "2fa_push",
+                    "validation_sid": "validation-session",
+                }
+            )
+        return "durable-token"
+
+    async def fake_request_validation(sid: str) -> None:
+        assert sid == "validation-session"
+
+    class FakeService:
+        def __init__(self, *, user_agent: str, token: str) -> None:
+            assert token == "durable-token"
+
+        async def is_token_valid_async(self) -> bool:
+            return True
+
+        async def get_user_info_async(self):
+            return SimpleNamespace(userid=12345)
+
+    monkeypatch.setattr(auth, "request_vk_token", fake_request_vk_token)
+    monkeypatch.setattr(auth, "request_vk_validation", fake_request_validation)
+    monkeypatch.setattr(auth, "Service", FakeService)
+    monkeypatch.setattr(
+        auth,
+        "save_credentials",
+        lambda path, token, user_agent, user_id: persisted.append(token),
+    )
+
+    async def scenario():
+        manager = VKAuthManager(tmp_path / "vk.sqlite3")
+        challenge = await manager.start("user@example.invalid", "temporary-test-password")
+        assert challenge["challenge"]["approval_supported"] is True
+        result = await manager.submit(challenge["challenge_id"], "", approved=True)
+        assert result["authenticated"] is True
+        assert calls[1]["code"] is None
+        assert persisted == ["durable-token"]
+
+    asyncio.run(scenario())

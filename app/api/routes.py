@@ -25,7 +25,8 @@ class AuthStart(BaseModel):
 
 class AuthChallenge(BaseModel):
     challenge_id: str = Field(min_length=16, max_length=128)
-    answer: str = Field(min_length=1, max_length=8192)
+    answer: str = Field(default="", max_length=8192)
+    approved: bool = False
 
 
 class AuthChallengeRefresh(BaseModel):
@@ -71,7 +72,9 @@ async def auth_start(payload: AuthStart, request: Request) -> dict[str, object]:
 @router.post("/auth/challenge")
 async def auth_challenge(payload: AuthChallenge, request: Request) -> dict[str, object]:
     try:
-        return await request.app.state.auth_manager.submit(payload.challenge_id, payload.answer)
+        return await request.app.state.auth_manager.submit(
+            payload.challenge_id, payload.answer, approved=payload.approved
+        )
     except (ValueError, VKAuthError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
