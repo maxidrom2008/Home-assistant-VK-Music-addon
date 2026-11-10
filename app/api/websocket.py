@@ -7,7 +7,7 @@ router = APIRouter()
 async def events(websocket: WebSocket) -> None:
     await websocket.accept()
     try:
-        await websocket.send_json({"type": "server.ready", "version": "0.1.0"})
+        await websocket.send_json({"type": "server.ready", "version": "0.1.2"})
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:

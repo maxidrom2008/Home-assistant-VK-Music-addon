@@ -25,6 +25,12 @@ jobs:
         env:
           VKMS_DATA_DIR: ${{ runner.temp }}/vkms-test-data
         run: pytest -q
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check browser JavaScript syntax
+        run: node --check app/web/app.js
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx

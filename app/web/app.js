@@ -1,0 +1,344 @@
+const api = p => new URL("api/v1/" + p, document.baseURI).toString();
+const $ = id => document.getElementById(id);
+let challengeId = null;
+let challengeType = null;
+let captchaWidget = null;
+const PAGE_SIZE = 50;
+let currentItems = [];
+let currentOffset = 0;
+let currentMode = "library";
+let hasMoreTracks = false;
+let loadSequence = 0;
+let currentTrackIndex = -1;
+
+async function call(path, options={}) {
+  const response = await fetch(api(path), {headers:{"Content-Type":"application/json"}, ...options});
+  const data = await response.json().catch(()=>({detail:"Некорректный ответ сервера"}));
+  if (!response.ok) throw new Error(data.detail || ("HTTP " + response.status));
+  return data;
+}
+async function destroyCaptchaWidget() {
+  if (captchaWidget) {
+    try { captchaWidget.destroy(); } catch (e) {}
+    captchaWidget = null;
+  }
+  $("vkCaptcha").replaceChildren();
+}
+async function finishLogin() {
+  await destroyCaptchaWidget();
+  challengeId = null;
+  challengeType = null;
+  $("challenge").style.display = "none";
+  await refreshStatus();
+  $("message").textContent = "VK успешно подключён.";
+  $("message").className = "msg ok";
+}
+async function refreshStatus() {
+  try {
+    const s = await call("auth/status");
+    if (s.authenticated) {
+      const firstConnect = $("music").hidden;
+      $("status").textContent = "VK подключён" + (s.user_id ? " · ID " + s.user_id : "") + (s.updated_at ? " · сохранён " + s.updated_at : "");
+      $("status").className = "status ok";
+      $("login").hidden = true;
+      $("manualToken").hidden = true;
+      $("connectedActions").hidden = false;
+      $("music").hidden = false;
+      if (firstConnect) await loadTracks("library", false);
+    } else if (s.token_saved) {
+      $("status").textContent = "Токен сохранён, но VK его не принимает. Подключите аккаунт заново или удалите токен.";
+      $("login").hidden = false;
+      $("manualToken").hidden = false;
+      $("connectedActions").hidden = false;
+      $("music").hidden = true;
+      $("audio").pause();
+      $("audio").removeAttribute("src");
+      currentTrackIndex = -1;
+    } else {
+      $("status").textContent = "VK не подключён";
+      $("login").hidden = false;
+      $("manualToken").hidden = false;
+      $("connectedActions").hidden = true;
+      $("music").hidden = true;
+      $("audio").pause();
+      $("audio").removeAttribute("src");
+      currentTrackIndex = -1;
+    }
+  } catch(e) {$("status").textContent = "Ошибка проверки: " + e.message;}
+}
+function formatDuration(seconds) {
+  const value = Math.max(0, Number(seconds) || 0);
+  return Math.floor(value / 60) + ":" + String(Math.floor(value % 60)).padStart(2, "0");
+}
+function renderTracks() {
+  const list = $("trackList");
+  list.replaceChildren();
+  currentItems.forEach((track, index) => {
+    const row = document.createElement("div");
+    row.className = "trackRow";
+    const meta = document.createElement("div");
+    meta.className = "trackMeta";
+    const title = document.createElement("div");
+    title.className = "trackTitle";
+    title.textContent = track.title || "Без названия";
+    const artist = document.createElement("div");
+    artist.className = "trackArtist";
+    artist.textContent = track.artist || "Неизвестный исполнитель";
+    meta.append(title, artist);
+    const duration = document.createElement("span");
+    duration.className = "trackDuration";
+    duration.textContent = formatDuration(track.duration);
+    const play = document.createElement("button");
+    play.type = "button";
+    play.textContent = "Слушать";
+    play.addEventListener("click", () => playTrack(index));
+    row.append(meta, duration, play);
+    list.append(row);
+  });
+  $("loadMore").style.display = hasMoreTracks ? "block" : "none";
+  if (!currentItems.length) $("libraryMessage").textContent = "Треки не найдены.";
+}
+async function loadTracks(mode="library", append=false) {
+  const query = mode === "search" ? $("searchQuery").value.trim() : "";
+  if (mode === "search" && !query) mode = "library";
+  currentMode = mode;
+  const offset = append ? currentOffset : 0;
+  const sequence = ++loadSequence;
+  $("libraryMessage").textContent = "Загрузка…";
+  if (!append) {
+    currentItems = [];
+    currentTrackIndex = -1;
+    currentOffset = 0;
+    hasMoreTracks = false;
+    renderTracks();
+  }
+  const params = new URLSearchParams({limit:String(PAGE_SIZE),offset:String(offset)});
+  const endpoint = mode === "search"
+    ? "search?q=" + encodeURIComponent(query) + "&" + params.toString()
+    : "library/tracks?" + params.toString();
+  try {
+    const data = await call(endpoint);
+    if (sequence !== loadSequence) return;
+    const items = Array.isArray(data.items) ? data.items : [];
+    currentItems = append ? currentItems.concat(items) : items;
+    currentOffset = offset + items.length;
+    hasMoreTracks = Boolean(data.has_more ?? (items.length === PAGE_SIZE));
+    $("libraryMessage").textContent = currentItems.length
+      ? (mode === "search" ? "Результаты поиска: " : "В моей музыке: ") + currentItems.length
+      : "Треки не найдены.";
+    renderTracks();
+  } catch (err) {
+    if (sequence !== loadSequence) return;
+    $("libraryMessage").textContent = err.message;
+  }
+}
+async function playTrack(index) {
+  const track = currentItems[index];
+  if (!track || !track.id) return;
+  currentTrackIndex = index;
+  $("nowPlaying").textContent = (track.artist ? track.artist + " — " : "") + (track.title || "Без названия");
+  const audio = $("audio");
+  audio.src = api("tracks/" + encodeURIComponent(track.id) + "/stream");
+  try {
+    await audio.play();
+  } catch (err) {
+    $("libraryMessage").textContent = "Не удалось начать воспроизведение: " + (err.message || String(err));
+  }
+}
+async function playNext() {
+  const nextIndex = currentTrackIndex + 1;
+  if (nextIndex < currentItems.length) return playTrack(nextIndex);
+  if (hasMoreTracks) {
+    const previousLength = currentItems.length;
+    await loadTracks(currentMode, true);
+    if (currentItems.length > previousLength) return playTrack(previousLength);
+  }
+}
+function playPrevious() {
+  if (currentTrackIndex > 0) playTrack(currentTrackIndex - 1);
+}
+async function showChallenge(data) {
+  await destroyCaptchaWidget();
+  challengeId = data.challenge_id;
+  const targetChallengeId = challengeId;
+  const c = data.challenge || {};
+  challengeType = c.type || "verification_code";
+  $("challenge").style.display = "block";
+  $("challengeTitle").textContent = challengeType === "browser_captcha" || challengeType === "captcha" ? "CAPTCHA VK" : "Подтверждение входа";
+  $("challengeHint").textContent = c.hint || c.phone_mask || c.label || "";
+  $("captcha").hidden = challengeType !== "captcha" || !c.image;
+  if (!$("captcha").hidden) $("captcha").src = c.image;
+  $("vkCaptcha").hidden = challengeType !== "browser_captcha";
+  $("answerLabel").hidden = challengeType === "browser_captcha" || challengeType === "unsupported_captcha";
+  $("answer").hidden = challengeType === "browser_captcha" || challengeType === "unsupported_captcha";
+  $("answer").value = "";
+  $("approved").checked = false;
+  $("approvalOption").hidden = !c.approval_supported || challengeType !== "verification_code";
+  $("answerButton").hidden = challengeType === "unsupported_captcha";
+  $("answerButton").textContent = challengeType === "browser_captcha" ? "Проверить и продолжить" : "Отправить";
+  $("refreshCaptchaButton").hidden = challengeType !== "browser_captcha";
+  $("message").textContent = data.error || "";
+  $("message").className = "msg";
+  if (challengeType !== "browser_captcha") {
+    if (challengeType === "unsupported_captcha") {
+      $("message").textContent = c.hint || c.label || "Этот формат CAPTCHA пока не поддерживается.";
+    } else {
+      $("answer").focus();
+    }
+    return;
+  }
+
+  try {
+    // Load the pinned VK ID CAPTCHA widget only when VK actually asks for it.
+    const sdk = await import("https://esm.sh/@vkid/captcha@2.0.0");
+    if (challengeId !== targetChallengeId) return;
+    if (typeof sdk.CaptchaWidget !== "function") throw new Error("В SDK отсутствует CaptchaWidget");
+    const widget = new sdk.CaptchaWidget();
+    captchaWidget = widget;
+    await widget.render({link:c.link, container:"#vkCaptcha"});
+    if (challengeId !== targetChallengeId) {
+      try { widget.destroy(); } catch (e) {}
+      return;
+    }
+    $("challengeHint").textContent = "Пройдите проверку в блоке VK. После её завершения нажмите «Проверить и продолжить». Ссылка одноразовая.";
+  } catch (err) {
+    $("message").textContent = "Не удалось загрузить виджет VK CAPTCHA: " + (err.message || String(err)) + ". Проверьте доступ браузера к esm.sh и обновите ссылку CAPTCHA.";
+  }
+}
+async function submitChallenge() {
+  if (!challengeId) return;
+  let answer = "";
+  if (challengeType === "browser_captcha") {
+    if (!captchaWidget) {
+      $("message").textContent = "Виджет CAPTCHA ещё не загружен. Обновите ссылку или разрешите загрузку внешнего скрипта.";
+      return;
+    }
+    try {
+      answer = await captchaWidget.execute();
+      if (typeof answer !== "string" || !answer.trim()) throw new Error("VK не вернул токен CAPTCHA");
+    } catch (code) {
+      const errorCode = String(code);
+      const messages = {
+        not_passed: "Сначала пройдите проверку VK в виджете.",
+        token_expired: "Ссылка CAPTCHA истекла. Запросите новую ссылку.",
+        already_checked: "Эта CAPTCHA уже использована. Запросите новую ссылку.",
+        close: "Проверка закрыта. Пройдите её заново.",
+        timeout: "VK пока не ответил. Повторите проверку или обновите ссылку.",
+        failed: "VK не завершил проверку. Обновите ссылку и попробуйте ещё раз."
+      };
+      $("message").textContent = messages[errorCode] || ("Ошибка CAPTCHA: " + errorCode);
+      return;
+    }
+  } else {
+    answer = $("answer").value.trim();
+    const approved = $("approved").checked;
+    if (!answer && !approved) {
+      $("message").textContent = "Введите код или подтвердите вход в приложении VK/MAX.";
+      return;
+    }
+    $("answerButton").disabled = true;
+    try {
+      const data = await call("auth/challenge",{method:"POST",body:JSON.stringify({challenge_id:challengeId,answer,approved})});
+      if (data.state === "challenge_required") await showChallenge(data);
+      else await finishLogin();
+    } catch(err) {
+      $("message").textContent = err.message;
+    } finally {
+      $("answerButton").disabled = false;
+    }
+    return;
+  }
+
+  $("answerButton").disabled = true;
+  try {
+    const data = await call("auth/challenge",{method:"POST",body:JSON.stringify({challenge_id:challengeId,answer})});
+    if (data.state === "challenge_required") await showChallenge(data);
+    else await finishLogin();
+  } catch(err) {
+    $("message").textContent = err.message;
+  } finally {
+    $("answerButton").disabled = false;
+  }
+}
+$("login").addEventListener("submit", async e => {
+  e.preventDefault();
+  $("loginButton").disabled = true;
+  $("message").textContent = "";
+  try {
+    const data = await call("auth/start", {method:"POST",body:JSON.stringify({login:$("loginName").value,password:$("password").value})});
+    $("password").value = "";
+    if (data.state === "challenge_required") await showChallenge(data);
+    else await finishLogin();
+  } catch(err) {
+    $("password").value = "";
+    $("message").textContent = err.message;
+  } finally {
+    $("loginButton").disabled = false;
+  }
+});
+$("tokenButton").addEventListener("click", async () => {
+  const token = $("tokenValue").value.trim();
+  if (!token) { $("message").textContent = "Вставьте access token VK."; return; }
+  $("tokenButton").disabled = true;
+  try {
+    await call("auth/token", {method:"POST",body:JSON.stringify({access_token:token})});
+    $("tokenValue").value = "";
+    await finishLogin();
+  } catch(err) { $("message").textContent = err.message; }
+  finally { $("tokenButton").disabled = false; }
+});
+$("answerButton").addEventListener("click", submitChallenge);
+$("refreshCaptchaButton").addEventListener("click", async () => {
+  if (!challengeId) return;
+  $("refreshCaptchaButton").disabled = true;
+  try {
+    const data = await call("auth/challenge/refresh", {
+      method:"POST",
+      body:JSON.stringify({challenge_id:challengeId})
+    });
+    if (data.state === "challenge_required") await showChallenge(data);
+    else await finishLogin();
+  } catch(err) {
+    $("message").textContent = err.message;
+  } finally {
+    $("refreshCaptchaButton").disabled = false;
+  }
+});
+$("cancelButton").addEventListener("click",async()=>{
+  if(challengeId) {
+    try { await call("auth/challenge/"+encodeURIComponent(challengeId),{method:"DELETE"}); } catch(e) {}
+  }
+  await destroyCaptchaWidget();
+  challengeId=null;
+  challengeType=null;
+  $("challenge").style.display="none";
+  $("message").textContent="Вход отменён.";
+});
+$("libraryButton").addEventListener("click", () => loadTracks("library", false));
+$("clearSearchButton").addEventListener("click", () => {
+  $("searchQuery").value = "";
+  loadTracks("library", false);
+});
+$("searchForm").addEventListener("submit", event => {
+  event.preventDefault();
+  loadTracks("search", false);
+});
+$("loadMore").addEventListener("click", () => loadTracks(currentMode, true));
+$("nextTrack").addEventListener("click", playNext);
+$("previousTrack").addEventListener("click", playPrevious);
+$("audio").addEventListener("ended", playNext);
+$("audio").addEventListener("error", () => {
+  if ($("audio").src) $("libraryMessage").textContent = "VK не смог предоставить поток этого трека. Попробуйте другой трек или повторите позже.";
+});
+$("deleteButton").addEventListener("click",async()=>{
+  if(!confirm("Удалить сохранённый токен VK из данных add-on?"))return;
+  $("deleteButton").disabled=true;
+  try {
+    await call("auth/token",{method:"DELETE"});
+    await refreshStatus();
+    $("message").textContent="Токен удалён. Для доступа к музыке подключите VK заново.";
+    $("message").className="msg ok";
+  } catch(err) {$("message").textContent=err.message;}
+  finally {$("deleteButton").disabled=false;}
+});
+refreshStatus();

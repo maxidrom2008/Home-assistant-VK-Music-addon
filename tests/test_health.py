@@ -40,3 +40,14 @@ def test_search_api_returns_pagination_metadata(monkeypatch) -> None:
     assert len(payload["items"]) == 2
     assert payload["has_more"] is True
     assert payload["query"] == "test song"
+
+
+def test_web_player_script_is_served() -> None:
+    with TestClient(app) as client:
+        page = client.get("/")
+        script = client.get("/app.js")
+    assert page.status_code == 200
+    assert 'src="app.js"' in page.text
+    assert script.status_code == 200
+    assert "function loadTracks" in script.text
+    assert "function playTrack" in script.text

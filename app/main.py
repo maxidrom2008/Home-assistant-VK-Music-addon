@@ -31,6 +31,15 @@ app.include_router(api_router)
 app.include_router(websocket_router)
 
 
+@app.get("/app.js")
+async def web_app_script():
+    return FileResponse(
+        WEB_ROOT / "app.js",
+        media_type="text/javascript; charset=utf-8",
+        headers={"cache-control": "no-cache"},
+    )
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
