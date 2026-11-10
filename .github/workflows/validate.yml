@@ -25,5 +25,13 @@ jobs:
         env:
           VKMS_DATA_DIR: ${{ runner.temp }}/vkms-test-data
         run: pytest -q
-      - name: Build container image
-        run: docker build --tag vk-music-server:ci .
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build amd64 and arm64 images
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --output type=oci,dest=/tmp/vk-music-server-oci.tar \
+            .
