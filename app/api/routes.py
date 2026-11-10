@@ -5,7 +5,7 @@ router = APIRouter(prefix="/api/v1")
 
 @router.get("/status")
 async def api_status() -> dict[str, str]:
-    return {"status": "starting", "product": "VK Music Server", "version": "0.1.0"}
+    return {"status": "ok", "product": "VK Music Server", "version": "0.1.0"}
 
 @router.get("/auth/status")
 async def auth_status() -> dict[str, object]:
