@@ -1,13 +1,19 @@
-"""Interactive VK authorization built on vkpymusic 4.0.2."""
+"""Interactive VK authorization with image and browser CAPTCHA support."""
 from __future__ import annotations
 
 import secrets
+import time
 from typing import Any
+from urllib.parse import urlsplit
 
 from vkpymusic import Service, VkMobileClient
 from vkpymusic.vk_api import VkApiException, VkApiRequestBuilder, make_request_async
 
 from app.storage.database import save_credentials
+
+PENDING_TTL_SECONDS = 10 * 60
+MAX_CAPTCHA_REFRESHES = 3
+_ALLOWED_CAPTCHA_HOSTS = {"id.vk.com", "id.vk.ru"}
 
 
 class VKAuthChallenge(Exception):
@@ -20,28 +26,70 @@ class VKAuthError(Exception):
     pass
 
 
-def build_auth_request(login: str, password: str, *, code: str | None = None,
-                       captcha_sid: str | None = None,
-                       captcha_answer: str | None = None):
-    """Build VK's offline-scope password grant without forcing SMS."""
+def validate_browser_captcha_link(value: Any) -> str:
+    """Accept only VK ID's HTTPS CAPTCHA page; never reflect arbitrary URLs."""
+    if not isinstance(value, str) or not value or len(value) > 8192:
+        raise ValueError("VK returned an invalid CAPTCHA link")
+    if any(ord(char) < 32 for char in value):
+        raise ValueError("VK returned an invalid CAPTCHA link")
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("VK returned an invalid CAPTCHA link") from exc
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname not in _ALLOWED_CAPTCHA_HOSTS
+        or port not in (None, 443)
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path.rstrip("/") != "/not_robot_captcha"
+        or not parsed.query
+    ):
+        raise ValueError("VK returned an unsupported CAPTCHA link")
+    return value
+
+
+def build_auth_request(
+    login: str,
+    password: str,
+    *,
+    code: str | None = None,
+    captcha_sid: str | None = None,
+    captcha_answer: str | None = None,
+    captcha_success_token: str | None = None,
+):
+    """Build VK's password grant without forcing SMS or solving CAPTCHA locally."""
     request = VkApiRequestBuilder.build_req_auth(
         login=login, password=password, client=VkMobileClient, code=code
     )
-    # vkpymusic requests "audio,offline". Keep offline, but let VK choose
-    # between SMS, call, app, CAPTCHA, or another available validation route.
+    # vkpymusic 4.0.2 hard-codes force_sms=1. Let VK choose SMS/call/app.
     request.params.pop("force_sms", None)
     if captcha_sid and captcha_answer:
         request.params["captcha_sid"] = captcha_sid
         request.params["captcha_key"] = captcha_answer
+    if captcha_success_token:
+        # VK ID's browser CAPTCHA token is distinct from the legacy image key.
+        request.params["success_token"] = captcha_success_token
     return request
 
 
-async def request_vk_token(login: str, password: str, *, code: str | None = None,
-                           captcha_sid: str | None = None,
-                           captcha_answer: str | None = None) -> str:
+async def request_vk_token(
+    login: str,
+    password: str,
+    *,
+    code: str | None = None,
+    captcha_sid: str | None = None,
+    captcha_answer: str | None = None,
+    captcha_success_token: str | None = None,
+) -> str:
     request = build_auth_request(
-        login, password, code=code, captcha_sid=captcha_sid,
+        login,
+        password,
+        code=code,
+        captcha_sid=captcha_sid,
         captcha_answer=captcha_answer,
+        captcha_success_token=captcha_success_token,
     )
     try:
         response = await make_request_async(request)
@@ -66,15 +114,43 @@ async def request_vk_validation(sid: str) -> None:
         raise VKAuthError(f"VK could not start verification: {message}") from err
 
 
-def challenge_view(details: dict[str, Any], challenge_id: str,
-                   error: str | None = None) -> dict[str, Any]:
+def challenge_view(
+    details: dict[str, Any],
+    challenge_id: str,
+    error: str | None = None,
+) -> dict[str, Any]:
     kind = str(details.get("error") or "")
     validation = str(details.get("validation_type") or "")
     if kind == "need_captcha":
-        challenge = {
-            "type": "captcha", "image": details.get("captcha_img"),
-            "label": "Введите символы с изображения VK",
-        }
+        redirect_uri = details.get("redirect_uri")
+        if redirect_uri:
+            try:
+                link = validate_browser_captcha_link(redirect_uri)
+            except ValueError:
+                challenge = {
+                    "type": "unsupported_captcha",
+                    "label": "VK запросил браузерную CAPTCHA, но прислал ссылку неизвестного формата.",
+                    "hint": "Не открывайте сторонние ссылки. Используйте ручное подключение токена ниже или начните вход заново.",
+                }
+            else:
+                challenge = {
+                    "type": "browser_captcha",
+                    "link": link,
+                    "label": "Пройдите проверку VK в блоке ниже",
+                    "hint": "Ссылка одноразовая. Завершите проверку и сразу нажмите «Проверить и продолжить».",
+                }
+        elif details.get("captcha_sid") and details.get("captcha_img"):
+            challenge = {
+                "type": "captcha",
+                "image": details.get("captcha_img"),
+                "label": "Введите символы с изображения VK",
+            }
+        else:
+            challenge = {
+                "type": "unsupported_captcha",
+                "label": "VK запросил CAPTCHA неподдерживаемого формата.",
+                "hint": "Используйте ручное подключение проверенного access token ниже или начните вход заново.",
+            }
     else:
         labels = {
             "2fa_sms": "Код из SMS",
@@ -82,86 +158,196 @@ def challenge_view(details: dict[str, Any], challenge_id: str,
             "2fa_app": "Код из приложения VK",
         }
         challenge = {
-            "type": "verification_code", "validation_type": validation,
+            "type": "verification_code",
+            "validation_type": validation,
             "phone_mask": details.get("phone_mask"),
             "label": labels.get(validation, "Код подтверждения VK"),
-            "hint": "Введите код или последние четыре цифры номера звонка, если VK выбрал звонок.",
+            "hint": "Введите код подтверждения. Для проверки звонком введите последние четыре цифры номера.",
         }
-    return {"state": "challenge_required", "challenge_id": challenge_id,
-            "challenge": challenge, "error": error}
+    return {
+        "state": "challenge_required",
+        "challenge_id": challenge_id,
+        "challenge": challenge,
+        "error": error,
+    }
 
 
 class VKAuthManager:
-    """Pending password/challenge state lives only in memory; final token is durable."""
+    """Pending login/challenge data is short-lived memory state; only tokens persist."""
+
+    _SENSITIVE_FIELDS = (
+        "login",
+        "password",
+        "code",
+        "captcha_answer",
+        "captcha_success_token",
+        "captcha_redirect_uri",
+        "captcha_sid",
+    )
 
     def __init__(self, database_path) -> None:
         self.database_path = database_path
         self.pending: dict[str, dict[str, Any]] = {}
 
+    def _discard(self, challenge_id: str) -> None:
+        session = self.pending.pop(challenge_id, None)
+        if session:
+            for key in self._SENSITIVE_FIELDS:
+                if key in session:
+                    session[key] = ""
+
+    def _expire_old_sessions(self) -> None:
+        now = time.monotonic()
+        expired = [
+            key
+            for key, session in self.pending.items()
+            if now - session.get("created_at", 0) > PENDING_TTL_SECONDS
+        ]
+        for key in expired:
+            self._discard(key)
+
     async def start(self, login: str, password: str) -> dict[str, Any]:
+        self._expire_old_sessions()
         if not login.strip() or not password:
             raise ValueError("Введите телефон/email и пароль VK")
+        # A new login replaces abandoned pending logins and clears their secrets.
+        self.cancel_all()
         challenge_id = secrets.token_urlsafe(24)
         self.pending[challenge_id] = {
-            "login": login.strip(), "password": password, "code": None,
-            "captcha_sid": None, "captcha_answer": None,
-            "pending_validation": None, "requested_sid": None,
+            "login": login.strip(),
+            "password": password,
+            "code": None,
+            "captcha_sid": None,
+            "captcha_answer": None,
+            "captcha_success_token": None,
+            "captcha_redirect_uri": None,
+            "captcha_kind": None,
+            "captcha_refreshes": 0,
+            "pending_validation": None,
+            "requested_sid": None,
+            "created_at": time.monotonic(),
         }
         return await self._attempt(challenge_id)
 
     async def submit(self, challenge_id: str, answer: str) -> dict[str, Any]:
+        self._expire_old_sessions()
         session = self.pending.get(challenge_id)
         if not session:
             raise ValueError("Сеанс авторизации истёк. Начните вход заново.")
-        if session.get("captcha_sid"):
-            session["captcha_answer"] = answer.strip()
+        value = answer.strip()
+        if not value:
+            raise ValueError("Введите ответ на проверку VK")
+        captcha_kind = session.get("captcha_kind")
+        if captcha_kind == "browser":
+            session["captcha_success_token"] = value
+        elif captcha_kind == "image":
+            session["captcha_answer"] = value
+        elif captcha_kind == "unsupported":
+            raise ValueError("Эта CAPTCHA не поддерживается. Используйте ручное подключение токена.")
         else:
-            session["code"] = answer.strip()
+            session["code"] = value
+        return await self._attempt(challenge_id)
+
+    async def refresh_captcha(self, challenge_id: str) -> dict[str, Any]:
+        """Request a fresh VK CAPTCHA link after the one-use browser link expires."""
+        self._expire_old_sessions()
+        session = self.pending.get(challenge_id)
+        if not session:
+            raise ValueError("Сеанс авторизации истёк. Начните вход заново.")
+        if session.get("captcha_kind") != "browser":
+            raise ValueError("Для текущего шага обновление CAPTCHA недоступно")
+        if session.get("captcha_refreshes", 0) >= MAX_CAPTCHA_REFRESHES:
+            self._discard(challenge_id)
+            raise VKAuthError("VK CAPTCHA несколько раз истекла. Начните вход заново.")
+        session["captcha_refreshes"] += 1
+        session["captcha_kind"] = None
+        session["captcha_redirect_uri"] = None
+        session["captcha_success_token"] = None
         return await self._attempt(challenge_id)
 
     async def _attempt(self, challenge_id: str) -> dict[str, Any]:
         session = self.pending[challenge_id]
         try:
             token = await request_vk_token(
-                session["login"], session["password"], code=session.get("code"),
+                session["login"],
+                session["password"],
+                code=session.get("code"),
                 captcha_sid=session.get("captcha_sid"),
                 captcha_answer=session.get("captcha_answer"),
+                captcha_success_token=session.get("captcha_success_token"),
             )
         except VKAuthChallenge as exc:
             details = exc.details
             error = str(details.get("error") or "")
-            session["code"] = session["captcha_sid"] = session["captcha_answer"] = None
+
+            # One-time answers are consumed by each request, successful or not.
+            session["code"] = None
+            session["captcha_sid"] = None
+            session["captcha_answer"] = None
+            session["captcha_success_token"] = None
+
             if error == "invalid_client":
-                self.pending.pop(challenge_id, None)
+                self._discard(challenge_id)
                 raise VKAuthError("VK не принял логин или пароль") from exc
             if error == "9;Flood control" or details.get("error_type") == "password_bruteforce_attempt":
-                self.pending.pop(challenge_id, None)
+                self._discard(challenge_id)
                 raise VKAuthError("VK временно ограничил попытки входа. Попробуйте позже.") from exc
+
+            if error == "need_captcha":
+                session["pending_validation"] = None
+                redirect_uri = details.get("redirect_uri")
+                if redirect_uri:
+                    try:
+                        session["captcha_redirect_uri"] = validate_browser_captcha_link(redirect_uri)
+                        session["captcha_kind"] = "browser"
+                    except ValueError:
+                        session["captcha_kind"] = "unsupported"
+                        session["captcha_redirect_uri"] = None
+                elif details.get("captcha_sid") and details.get("captcha_img"):
+                    session["captcha_kind"] = "image"
+                    session["captcha_sid"] = str(details["captcha_sid"])
+                else:
+                    session["captcha_kind"] = "unsupported"
+                return challenge_view(details, challenge_id)
+
             if error == "need_validation":
+                session["captcha_kind"] = None
+                session["captcha_redirect_uri"] = None
+                session["pending_validation"] = details
                 sid = str(details.get("validation_sid") or "")
                 if sid and sid != session.get("requested_sid"):
-                    await request_vk_validation(sid)
+                    try:
+                        await request_vk_validation(sid)
+                    except VKAuthError:
+                        self._discard(challenge_id)
+                        raise
                     session["requested_sid"] = sid
-                session["pending_validation"] = details
                 return challenge_view(details, challenge_id)
+
+            if error == "invalid_request" and session.get("captcha_kind") in {"browser", "image"}:
+                # The browser token/image answer was rejected or expired. Drop it and
+                # ask VK for a fresh challenge instead of reusing a consumed link.
+                session["captcha_kind"] = None
+                session["captcha_redirect_uri"] = None
+                if session.get("captcha_refreshes", 0) < MAX_CAPTCHA_REFRESHES:
+                    session["captcha_refreshes"] += 1
+                    return await self._attempt(challenge_id)
+                self._discard(challenge_id)
+                raise VKAuthError(
+                    "VK не принял ответ CAPTCHA. Слишком много повторов; начните вход заново."
+                ) from exc
+
             if error == "invalid_request" and session.get("pending_validation"):
-                return challenge_view(session["pending_validation"], challenge_id,
-                                      "VK не принял подтверждение. Проверьте код и повторите ввод.")
-            if error == "need_captcha":
-                captcha_sid = str(details.get("captcha_sid") or "")
-                captcha_image = details.get("captcha_img")
-                if not captcha_sid or not captcha_image:
-                    self.pending.pop(challenge_id, None)
-                    raise VKAuthError(
-                        "VK запросил браузерную CAPTCHA нового типа. Введите готовый access token "
-                        "в поле ручного подключения ниже; автоматический обход CAPTCHA не выполняется."
-                    ) from exc
-                session["captcha_sid"] = captcha_sid
-                return challenge_view(details, challenge_id)
-            self.pending.pop(challenge_id, None)
+                return challenge_view(
+                    session["pending_validation"],
+                    challenge_id,
+                    "VK не принял подтверждение. Проверьте код и повторите ввод.",
+                )
+
+            self._discard(challenge_id)
             raise VKAuthError(f"Неподдерживаемый ответ VK: {error or 'unknown'}") from exc
         except Exception:
-            self.pending.pop(challenge_id, None)
+            self._discard(challenge_id)
             raise
 
         user_agent = VkMobileClient.user_agent
@@ -171,24 +357,22 @@ class VKAuthManager:
                 raise VKAuthError("VK выдал токен, но проверка токена не прошла")
             user = await service.get_user_info_async()
             user_id = str(getattr(user, "userid", "") or "")
+            save_credentials(self.database_path, token, user_agent, user_id or None)
         except VKAuthError:
-            self.pending.pop(challenge_id, None)
+            self._discard(challenge_id)
             raise
         except Exception as exc:
-            self.pending.pop(challenge_id, None)
+            self._discard(challenge_id)
             raise VKAuthError(f"Не удалось проверить токен VK ({type(exc).__name__})") from exc
 
-        save_credentials(self.database_path, token, user_agent, user_id or None)
-        self.pending.pop(challenge_id, None)
+        self._discard(challenge_id)
         return {"state": "authenticated", "authenticated": True, "user_id": user_id or None}
 
     def cancel(self, challenge_id: str) -> bool:
-        session = self.pending.pop(challenge_id, None)
-        if session:
-            session["password"] = ""
-        return session is not None
+        existed = challenge_id in self.pending
+        self._discard(challenge_id)
+        return existed
 
     def cancel_all(self) -> None:
-        for session in self.pending.values():
-            session["password"] = ""
-        self.pending.clear()
+        for challenge_id in list(self.pending):
+            self._discard(challenge_id)

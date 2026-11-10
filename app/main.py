@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI):
     app.state.auth_manager.cancel_all()
 
 
-app = FastAPI(title="VK Music Server", version="0.1.1", lifespan=lifespan)
+app = FastAPI(title="VK Music Server", version="0.1.2", lifespan=lifespan)
 app.add_middleware(IngressOnlyMiddleware)
 app.include_router(api_router)
 app.include_router(websocket_router)

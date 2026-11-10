@@ -14,8 +14,10 @@ label{display:block;margin:16px 0 6px;font-weight:600}
 input{box-sizing:border-box;width:100%;border:1px solid #4b5563;border-radius:9px;background:#111827;color:#fff;padding:12px;font-size:16px}
 button{border:0;border-radius:9px;padding:12px 16px;font-size:15px;font-weight:650;cursor:pointer;margin:16px 8px 0 0;background:#2563eb;color:#fff}
 button.secondary{background:#374151}button.danger{background:#991b1b}
-button:disabled{opacity:.5;cursor:wait}#challenge{display:none;margin-top:18px;padding-top:16px;border-top:1px solid #374151}
+button:disabled{opacity:.5;cursor:wait}
+#challenge{display:none;margin-top:18px;padding-top:16px;border-top:1px solid #374151}
 #captcha{max-width:100%;display:block;margin:12px 0;border-radius:8px;background:#fff}
+#vkCaptcha{margin:14px 0;min-height:48px}
 .msg{white-space:pre-wrap;margin-top:12px;color:#fca5a5}.ok{color:#86efac}
 small{display:block;color:#9ca3af;margin-top:10px}
 </style>
@@ -32,7 +34,7 @@ small{display:block;color:#9ca3af;margin-top:10px}
 <button id="loginButton" type="submit">Подключить VK</button>
 </form>
 <section id="manualToken">
-<p class="muted">Не получается пройти CAPTCHA в браузере VK? Можно подключить уже полученный VK access token. Он проверяется перед сохранением.</p>
+<p class="muted">Резервный вариант: можно подключить уже полученный VK access token. Сервер проверит его перед сохранением. CAPTCHA не обходится автоматически.</p>
 <label for="tokenValue">VK access token</label>
 <input id="tokenValue" type="password" autocomplete="off" spellcheck="false">
 <button id="tokenButton" class="secondary" type="button">Проверить и сохранить токен</button>
@@ -40,27 +42,48 @@ small{display:block;color:#9ca3af;margin-top:10px}
 <section id="challenge">
 <h2 id="challengeTitle">Подтверждение VK</h2>
 <p id="challengeHint" class="muted"></p>
+<div id="vkCaptcha" hidden></div>
 <img id="captcha" alt="CAPTCHA VK" hidden>
 <label id="answerLabel" for="answer">Код подтверждения</label>
 <input id="answer" autocomplete="one-time-code">
 <button id="answerButton" type="button">Отправить</button>
+<button id="refreshCaptchaButton" class="secondary" type="button" hidden>Обновить ссылку CAPTCHA</button>
 <button id="cancelButton" class="secondary" type="button">Отменить вход</button>
 </section>
-<div id="message" class="msg" role="status"></div>
+<div id="message" class="msg" role="status" aria-live="polite"></div>
 <div id="connectedActions" hidden>
 <button id="deleteButton" class="danger" type="button">Отключить VK и удалить сохранённый токен</button>
 <small>Сервер хранит токен в папке /data и не удаляет его по таймеру. VK всё ещё может самостоятельно отозвать или ограничить токен.</small>
 </div>
 </section></main>
-<script>
+<script type="module">
 const api = p => new URL("api/v1/" + p, document.baseURI).toString();
 const $ = id => document.getElementById(id);
 let challengeId = null;
+let challengeType = null;
+let captchaWidget = null;
+
 async function call(path, options={}) {
   const response = await fetch(api(path), {headers:{"Content-Type":"application/json"}, ...options});
   const data = await response.json().catch(()=>({detail:"Некорректный ответ сервера"}));
   if (!response.ok) throw new Error(data.detail || ("HTTP " + response.status));
   return data;
+}
+async function destroyCaptchaWidget() {
+  if (captchaWidget) {
+    try { captchaWidget.destroy(); } catch (e) {}
+    captchaWidget = null;
+  }
+  $("vkCaptcha").replaceChildren();
+}
+async function finishLogin() {
+  await destroyCaptchaWidget();
+  challengeId = null;
+  challengeType = null;
+  $("challenge").style.display = "none";
+  await refreshStatus();
+  $("message").textContent = "VK успешно подключён.";
+  $("message").className = "msg ok";
 }
 async function refreshStatus() {
   try {
@@ -84,18 +107,94 @@ async function refreshStatus() {
     }
   } catch(e) {$("status").textContent = "Ошибка проверки: " + e.message;}
 }
-function showChallenge(data) {
+async function showChallenge(data) {
+  await destroyCaptchaWidget();
   challengeId = data.challenge_id;
+  const targetChallengeId = challengeId;
   const c = data.challenge || {};
+  challengeType = c.type || "verification_code";
   $("challenge").style.display = "block";
-  $("challengeTitle").textContent = c.type === "captcha" ? "CAPTCHA VK" : "Подтверждение входа";
+  $("challengeTitle").textContent = challengeType === "browser_captcha" || challengeType === "captcha" ? "CAPTCHA VK" : "Подтверждение входа";
   $("challengeHint").textContent = c.hint || c.phone_mask || c.label || "";
-  $("answerLabel").textContent = c.label || "Код подтверждения";
-  $("captcha").hidden = c.type !== "captcha" || !c.image;
+  $("captcha").hidden = challengeType !== "captcha" || !c.image;
   if (!$("captcha").hidden) $("captcha").src = c.image;
+  $("vkCaptcha").hidden = challengeType !== "browser_captcha";
+  $("answerLabel").hidden = challengeType === "browser_captcha" || challengeType === "unsupported_captcha";
+  $("answer").hidden = challengeType === "browser_captcha" || challengeType === "unsupported_captcha";
   $("answer").value = "";
+  $("answerButton").hidden = challengeType === "unsupported_captcha";
+  $("answerButton").textContent = challengeType === "browser_captcha" ? "Проверить и продолжить" : "Отправить";
+  $("refreshCaptchaButton").hidden = challengeType !== "browser_captcha";
   $("message").textContent = data.error || "";
-  $("answer").focus();
+  $("message").className = "msg";
+  if (challengeType !== "browser_captcha") {
+    if (challengeType === "unsupported_captcha") {
+      $("message").textContent = c.hint || c.label || "Этот формат CAPTCHA пока не поддерживается.";
+    } else {
+      $("answer").focus();
+    }
+    return;
+  }
+
+  try {
+    // Load the pinned VK ID CAPTCHA widget only when VK actually asks for it.
+    const sdk = await import("https://esm.sh/@vkid/captcha@2.0.0");
+    if (challengeId !== targetChallengeId) return;
+    if (typeof sdk.CaptchaWidget !== "function") throw new Error("В SDK отсутствует CaptchaWidget");
+    const widget = new sdk.CaptchaWidget();
+    captchaWidget = widget;
+    await widget.render({link:c.link, container:"#vkCaptcha"});
+    if (challengeId !== targetChallengeId) {
+      try { widget.destroy(); } catch (e) {}
+      return;
+    }
+    $("challengeHint").textContent = "Пройдите проверку в блоке VK. После её завершения нажмите «Проверить и продолжить». Ссылка одноразовая.";
+  } catch (err) {
+    $("message").textContent = "Не удалось загрузить виджет VK CAPTCHA: " + (err.message || String(err)) + ". Проверьте доступ браузера к esm.sh и обновите ссылку CAPTCHA.";
+  }
+}
+async function submitChallenge() {
+  if (!challengeId) return;
+  let answer = "";
+  if (challengeType === "browser_captcha") {
+    if (!captchaWidget) {
+      $("message").textContent = "Виджет CAPTCHA ещё не загружен. Обновите ссылку или разрешите загрузку внешнего скрипта.";
+      return;
+    }
+    try {
+      answer = await captchaWidget.execute();
+      if (typeof answer !== "string" || !answer.trim()) throw new Error("VK не вернул токен CAPTCHA");
+    } catch (code) {
+      const errorCode = String(code);
+      const messages = {
+        not_passed: "Сначала пройдите проверку VK в виджете.",
+        token_expired: "Ссылка CAPTCHA истекла. Запросите новую ссылку.",
+        already_checked: "Эта CAPTCHA уже использована. Запросите новую ссылку.",
+        close: "Проверка закрыта. Пройдите её заново.",
+        timeout: "VK пока не ответил. Повторите проверку или обновите ссылку.",
+        failed: "VK не завершил проверку. Обновите ссылку и попробуйте ещё раз."
+      };
+      $("message").textContent = messages[errorCode] || ("Ошибка CAPTCHA: " + errorCode);
+      return;
+    }
+  } else {
+    answer = $("answer").value.trim();
+    if (!answer) {
+      $("message").textContent = "Введите ответ на проверку VK.";
+      return;
+    }
+  }
+
+  $("answerButton").disabled = true;
+  try {
+    const data = await call("auth/challenge",{method:"POST",body:JSON.stringify({challenge_id:challengeId,answer})});
+    if (data.state === "challenge_required") await showChallenge(data);
+    else await finishLogin();
+  } catch(err) {
+    $("message").textContent = err.message;
+  } finally {
+    $("answerButton").disabled = false;
+  }
 }
 $("login").addEventListener("submit", async e => {
   e.preventDefault();
@@ -104,37 +203,52 @@ $("login").addEventListener("submit", async e => {
   try {
     const data = await call("auth/start", {method:"POST",body:JSON.stringify({login:$("loginName").value,password:$("password").value})});
     $("password").value = "";
-    if (data.state === "challenge_required") showChallenge(data);
-    else { $("challenge").style.display="none"; await refreshStatus(); $("message").textContent="VK успешно подключён."; $("message").className="msg ok"; }
-  } catch(err) {$("password").value=""; $("message").textContent=err.message;}
-  finally {$("loginButton").disabled=false;}
+    if (data.state === "challenge_required") await showChallenge(data);
+    else await finishLogin();
+  } catch(err) {
+    $("password").value = "";
+    $("message").textContent = err.message;
+  } finally {
+    $("loginButton").disabled = false;
+  }
 });
 $("tokenButton").addEventListener("click", async () => {
   const token = $("tokenValue").value.trim();
   if (!token) { $("message").textContent = "Вставьте access token VK."; return; }
   $("tokenButton").disabled = true;
   try {
-    const data = await call("auth/token", {method:"POST",body:JSON.stringify({access_token:token})});
+    await call("auth/token", {method:"POST",body:JSON.stringify({access_token:token})});
     $("tokenValue").value = "";
-    await refreshStatus();
-    $("message").textContent = "Токен проверен и сохранён.";
-    $("message").className = "msg ok";
+    await finishLogin();
   } catch(err) { $("message").textContent = err.message; }
   finally { $("tokenButton").disabled = false; }
 });
-$("answerButton").addEventListener("click", async () => {
+$("answerButton").addEventListener("click", submitChallenge);
+$("refreshCaptchaButton").addEventListener("click", async () => {
   if (!challengeId) return;
-  $("answerButton").disabled = true;
+  $("refreshCaptchaButton").disabled = true;
   try {
-    const data = await call("auth/challenge",{method:"POST",body:JSON.stringify({challenge_id:challengeId,answer:$("answer").value})});
-    if (data.state === "challenge_required") showChallenge(data);
-    else {challengeId=null;$("challenge").style.display="none";await refreshStatus();$("message").textContent="VK успешно подключён.";$("message").className="msg ok";}
-  } catch(err) {$("message").textContent=err.message;}
-  finally {$("answerButton").disabled=false;}
+    const data = await call("auth/challenge/refresh", {
+      method:"POST",
+      body:JSON.stringify({challenge_id:challengeId})
+    });
+    if (data.state === "challenge_required") await showChallenge(data);
+    else await finishLogin();
+  } catch(err) {
+    $("message").textContent = err.message;
+  } finally {
+    $("refreshCaptchaButton").disabled = false;
+  }
 });
 $("cancelButton").addEventListener("click",async()=>{
-  if(challengeId) { try { await call("auth/challenge/"+encodeURIComponent(challengeId),{method:"DELETE"}); } catch(e) {} }
-  challengeId=null;$("challenge").style.display="none";$("message").textContent="Вход отменён.";
+  if(challengeId) {
+    try { await call("auth/challenge/"+encodeURIComponent(challengeId),{method:"DELETE"}); } catch(e) {}
+  }
+  await destroyCaptchaWidget();
+  challengeId=null;
+  challengeType=null;
+  $("challenge").style.display="none";
+  $("message").textContent="Вход отменён.";
 });
 $("deleteButton").addEventListener("click",async()=>{
   if(!confirm("Удалить сохранённый токен VK из данных add-on?"))return;

@@ -25,7 +25,11 @@ class AuthStart(BaseModel):
 
 class AuthChallenge(BaseModel):
     challenge_id: str = Field(min_length=16, max_length=128)
-    answer: str = Field(min_length=1, max_length=128)
+    answer: str = Field(min_length=1, max_length=8192)
+
+
+class AuthChallengeRefresh(BaseModel):
+    challenge_id: str = Field(min_length=16, max_length=128)
 
 
 class TokenImport(BaseModel):
@@ -34,7 +38,7 @@ class TokenImport(BaseModel):
 
 @router.get("/status")
 async def api_status() -> dict[str, str]:
-    return {"status": "ok", "product": "VK Music Server", "version": "0.1.1"}
+    return {"status": "ok", "product": "VK Music Server", "version": "0.1.2"}
 
 
 @router.get("/auth/status")
@@ -68,6 +72,17 @@ async def auth_start(payload: AuthStart, request: Request) -> dict[str, object]:
 async def auth_challenge(payload: AuthChallenge, request: Request) -> dict[str, object]:
     try:
         return await request.app.state.auth_manager.submit(payload.challenge_id, payload.answer)
+    except (ValueError, VKAuthError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/auth/challenge/refresh")
+async def auth_challenge_refresh(
+    payload: AuthChallengeRefresh,
+    request: Request,
+) -> dict[str, object]:
+    try:
+        return await request.app.state.auth_manager.refresh_captcha(payload.challenge_id)
     except (ValueError, VKAuthError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

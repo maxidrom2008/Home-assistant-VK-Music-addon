@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2
+- Add first-class VK ID browser CAPTCHA integration using the pinned @vkid/captcha 2.0.0 widget.
+- Pass the browser-generated success_token back into the pending VK authorization request; retain legacy image CAPTCHA support.
+- Refresh expired/consumed CAPTCHA links instead of retrying stale one-use tokens.
+- Validate CAPTCHA redirect URLs against the VK ID HTTPS host allowlist before returning them to the browser.
+- Expire abandoned in-memory login sessions after 10 minutes and wipe temporary credentials on cancel, replacement, failure and success.
+- Add automated tests for the modern CAPTCHA request and challenge lifecycle.
+
 ## 0.1.1
 - Integrate vkpymusic 4.0.2 for VK authorization and media requests.
 - Add interactive CAPTCHA and VK verification challenge endpoints, plus manual token import for browser-only CAPTCHA flows.
