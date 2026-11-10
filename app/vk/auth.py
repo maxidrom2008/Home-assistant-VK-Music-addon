@@ -20,17 +20,29 @@ class VKAuthError(Exception):
     pass
 
 
-async def request_vk_token(login: str, password: str, *, code: str | None = None,
-                           captcha_sid: str | None = None,
-                           captcha_answer: str | None = None) -> str:
+def build_auth_request(login: str, password: str, *, code: str | None = None,
+                       captcha_sid: str | None = None,
+                       captcha_answer: str | None = None):
+    """Build VK's offline-scope password grant without forcing SMS."""
     request = VkApiRequestBuilder.build_req_auth(
         login=login, password=password, client=VkMobileClient, code=code
     )
-    # Let VK choose the validation channel instead of forcing SMS.
+    # vkpymusic requests "audio,offline". Keep offline, but let VK choose
+    # between SMS, call, app, CAPTCHA, or another available validation route.
     request.params.pop("force_sms", None)
     if captcha_sid and captcha_answer:
         request.params["captcha_sid"] = captcha_sid
         request.params["captcha_key"] = captcha_answer
+    return request
+
+
+async def request_vk_token(login: str, password: str, *, code: str | None = None,
+                           captcha_sid: str | None = None,
+                           captcha_answer: str | None = None) -> str:
+    request = build_auth_request(
+        login, password, code=code, captcha_sid=captcha_sid,
+        captcha_answer=captcha_answer,
+    )
     try:
         response = await make_request_async(request)
     except VkApiException as err:
