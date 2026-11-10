@@ -67,6 +67,11 @@ async def auth_challenge(payload: AuthChallenge, request: Request) -> dict[str, 
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.delete("/auth/challenge/{challenge_id}")
+async def auth_challenge_cancel(challenge_id: str, request: Request) -> dict[str, bool]:
+    return {"cancelled": request.app.state.auth_manager.cancel(challenge_id)}
+
+
 @router.delete("/auth/token")
 async def auth_delete(request: Request) -> dict[str, object]:
     request.app.state.auth_manager.cancel_all()
