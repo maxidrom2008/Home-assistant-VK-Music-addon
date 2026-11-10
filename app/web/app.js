@@ -46,12 +46,20 @@ async function refreshStatus() {
       $("manualToken").hidden = true;
       $("connectedActions").hidden = false;
       $("music").hidden = false;
+      try {
+        const integration = await call("integration/info");
+        $("haIntegration").hidden = !integration.available;
+        $("internalBaseUrl").textContent = integration.base_url || "";
+      } catch (e) {
+        $("haIntegration").hidden = true;
+      }
       if (firstConnect) await loadTracks("library", false);
     } else if (s.token_saved) {
       $("status").textContent = "Токен сохранён, но VK его не принимает. Подключите аккаунт заново или удалите токен.";
       $("login").hidden = false;
       $("manualToken").hidden = false;
       $("connectedActions").hidden = false;
+      $("haIntegration").hidden = true;
       $("music").hidden = true;
       $("audio").pause();
       $("audio").removeAttribute("src");
@@ -61,6 +69,7 @@ async function refreshStatus() {
       $("login").hidden = false;
       $("manualToken").hidden = false;
       $("connectedActions").hidden = true;
+      $("haIntegration").hidden = true;
       $("music").hidden = true;
       $("audio").pause();
       $("audio").removeAttribute("src");
@@ -454,6 +463,15 @@ $("serverStop").addEventListener("click", () => serverPlaybackAction("stop"));
 $("audio").addEventListener("ended", playNext);
 $("audio").addEventListener("error", () => {
   if ($("audio").src) $("libraryMessage").textContent = "VK не смог предоставить поток этого трека. Попробуйте другой трек или повторите позже.";
+});
+$("copyInternalUrl").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText($("internalBaseUrl").textContent);
+    $("message").textContent = "Внутренний URL скопирован.";
+    $("message").className = "msg ok";
+  } catch (err) {
+    $("message").textContent = "Не удалось скопировать. Выделите URL и скопируйте вручную.";
+  }
 });
 $("deleteButton").addEventListener("click",async()=>{
   if(!confirm("Удалить сохранённый токен VK из данных add-on?"))return;

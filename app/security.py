@@ -1,7 +1,9 @@
 """Restrict add-on traffic to Home Assistant Ingress and loopback.
 
-Home Assistant's current add-on ingress proxy connects from 172.30.32.2.
-The health endpoint remains available to Supervisor watchdog checks.
+Home Assistant Ingress/Supervisor traffic comes from 172.30.32.2.
+Home Assistant Core runs on the host network and reaches add-ons through
+the hassio bridge gateway (172.30.32.1). The health endpoint remains
+available to Supervisor watchdog checks.
 """
 from starlette.responses import JSONResponse
 
@@ -18,7 +20,7 @@ class IngressOnlyMiddleware:
         path = scope.get("path", "")
         client = scope.get("client")
         host = client[0] if client else ""
-        allowed = host in {"172.30.32.2", "127.0.0.1", "::1", "testclient"}
+        allowed = host in {"172.30.32.1", "172.30.32.2", "127.0.0.1", "::1", "testclient"}
         if path == "/health" and scope["type"] == "http":
             allowed = True
 

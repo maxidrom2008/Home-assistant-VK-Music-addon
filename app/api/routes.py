@@ -44,6 +44,20 @@ class ServerPlaybackRequest(BaseModel):
     track_id: str = Field(pattern=r"^-?[0-9]+_-?[0-9]+$", max_length=64)
 
 
+@router.get("/integration/info")
+async def integration_info(request: Request) -> dict[str, object]:
+    """Return the private hostname needed by the companion HA integration."""
+    info = getattr(request.app.state, "supervisor_info", {})
+    hostname = info.get("hostname")
+    return {
+        "available": bool(hostname),
+        "hostname": hostname,
+        "base_url": f"http://{hostname}:8099" if hostname else None,
+        "port": 8099,
+        "network": "Home Assistant internal network only",
+    }
+
+
 @router.get("/status")
 async def api_status() -> dict[str, str]:
     return {"status": "ok", "product": "VK Music Server", "version": "0.1.2"}

@@ -31,6 +31,8 @@ jobs:
           node-version: "22"
       - name: Check browser JavaScript syntax
         run: node --check app/web/app.js
+      - name: Compile Python sources
+        run: python -m compileall -q app custom_components
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx

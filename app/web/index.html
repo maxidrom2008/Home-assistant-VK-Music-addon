@@ -101,6 +101,13 @@ small{display:block;color:#9ca3af;margin-top:10px}
 <button id="cancelButton" class="secondary" type="button">Отменить вход</button>
 </section>
 <div id="message" class="msg" role="status" aria-live="polite"></div>
+<section id="haIntegration" hidden class="status">
+<strong>Интеграция Home Assistant</strong>
+<p class="muted">Добавьте пользовательскую интеграцию VK Music Server через HACS, затем вставьте внутренний URL:</p>
+<code id="internalBaseUrl"></code>
+<button id="copyInternalUrl" class="secondary" type="button">Копировать внутренний URL</button>
+<small>Адрес доступен только внутри сети Home Assistant и не публикуется в локальную сеть.</small>
+</section>
 <div id="connectedActions" hidden>
 <button id="deleteButton" class="danger" type="button">Отключить VK и удалить сохранённый токен</button>
 <small>Сервер хранит токен в папке /data и не удаляет его по таймеру. VK всё ещё может самостоятельно отозвать или ограничить токен.</small>

@@ -25,6 +25,14 @@ This checkpoint adds:
 
 **Token lifetime:** the add-on keeps the token until you remove it. It cannot force VK to keep the token valid forever; VK may revoke, expire, or restrict it independently. The add-on checks whether the saved token is currently accepted.
 
+## Home Assistant media_player integration
+
+The repository includes a companion custom integration at `custom_components/vk_music_server`. Add this GitHub repository to HACS as a custom repository of category **Integration**, install **VK Music Server**, and restart Home Assistant.
+
+After connecting the VK account in the add-on panel, copy the **internal URL** shown under **Интеграция Home Assistant**. Add the VK Music Server integration from **Settings → Devices & services → Add integration** and paste that URL (for example, `http://<supervisor-hostname>:8099`). The integration creates a `media_player.vk_music_server` entity with playback, pause, stop and media browsing for the user's library and playlists.
+
+The internal URL is not published on a host port. The add-on allows API access from Home Assistant Core's host-network gateway and the Supervisor/Ingress proxy only; other add-on containers and LAN clients are rejected. The add-on reads its own hostname from `GET /addons/self/info` using the limited Supervisor token.
+
 ## Setup and disconnect
 
 Open **VK Music** from the Home Assistant sidebar (or open the add-on's Ingress page). Enter your VK phone/email and password. Complete the CAPTCHA or verification challenge if VK asks for one.
@@ -41,6 +49,7 @@ All application endpoints are available through Home Assistant Ingress:
 
 - GET /health
 - GET /api/v1/status
+- GET /api/v1/integration/info — returns the internal URL for the companion Home Assistant integration
 - GET /api/v1/auth/status
 - POST /api/v1/auth/start — JSON: {"login":"...","password":"..."}
 - POST /api/v1/auth/challenge — JSON: {"challenge_id":"...","answer":"...","approved":false} (a verification code, image CAPTCHA answer, browser CAPTCHA success token, or `approved: true` after VK/MAX device approval)
@@ -65,7 +74,7 @@ Direct host-port publishing is intentionally disabled. This server accepts Home 
 ## Current limits
 
 - The web panel includes personal-library browsing, playlist browsing and track playback, search, pagination, and browser playback through the server-side stream proxy. Playlist access keys stay inside the server. The browser JavaScript is checked in CI.
-- A native Home Assistant media_player integration and a mobile app are separate roadmap tasks.
+- A companion Home Assistant `media_player` integration is included in `custom_components/vk_music_server`; install it through HACS as a custom integration. A native mobile app is still a separate roadmap task.
 - Server-side playback uses FFmpeg and the Home Assistant shared PulseAudio service. Select an output device in the add-on Audio settings; actual sound output depends on HAOS exposing a working sink.
 - VK audio availability depends on the account and VK's API access rules. CAPTCHA appearance is controlled by VK.
 

@@ -12,6 +12,8 @@
 - Add server-side FFmpeg playback through the Supervisor-managed PulseAudio service, with play, pause, resume and stop controls.
 - Enable the Home Assistant add-on audio interface and verify FFmpeg PulseAudio output support during image build.
 - Add private playlist-track resolution and web playlist browsing without exposing VK playlist access keys.
+- Add the companion Home Assistant media_player integration with media browsing for personal tracks and playlists.
+- Discover the app's actual internal DNS hostname through Supervisor and allow API access from Home Assistant Core without publishing a LAN port.
 
 ## 0.1.1
 - Integrate vkpymusic 4.0.2 for VK authorization and media requests.
