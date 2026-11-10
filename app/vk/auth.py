@@ -136,7 +136,15 @@ class VKAuthManager:
                 return challenge_view(session["pending_validation"], challenge_id,
                                       "VK не принял подтверждение. Проверьте код и повторите ввод.")
             if error == "need_captcha":
-                session["captcha_sid"] = str(details.get("captcha_sid") or "")
+                captcha_sid = str(details.get("captcha_sid") or "")
+                captcha_image = details.get("captcha_img")
+                if not captcha_sid or not captcha_image:
+                    self.pending.pop(challenge_id, None)
+                    raise VKAuthError(
+                        "VK запросил браузерную CAPTCHA нового типа. Введите готовый access token "
+                        "в поле ручного подключения ниже; автоматический обход CAPTCHA не выполняется."
+                    ) from exc
+                session["captcha_sid"] = captcha_sid
                 return challenge_view(details, challenge_id)
             self.pending.pop(challenge_id, None)
             raise VKAuthError(f"Неподдерживаемый ответ VK: {error or 'unknown'}") from exc
