@@ -1,12 +1,13 @@
 # Changelog
 
-## 0.1.0 — initial scaffold
+## 0.1.1
+- Integrate vkpymusic 4.0.2 for VK authorization and media requests.
+- Add interactive CAPTCHA and VK verification challenge endpoints.
+- Persist the final VK access token under /data with no application-side 24-hour TTL.
+- Add a settings panel and an explicit disconnect/delete-token action.
+- Add personal library, playlists, text search and a server-side stream proxy.
+- Restrict application traffic to Home Assistant Ingress and loopback.
+- Fix pytest import path and add persistent-storage tests.
 
-- Created the standalone Home Assistant add-on structure.
-- Added FastAPI REST and WebSocket entry points.
-- Added SQLite initialization in persistent /data.
-- Added explicit VK and playback adapter boundaries.
-- Added health endpoint and initial API response contracts.
-- Added FFmpeg to the container image for future server-side playback.
-
-This is an initial scaffold, not a feature-complete VK player.
+## 0.1.0
+- Initial standalone FastAPI, SQLite, Home Assistant add-on and CI scaffold.
