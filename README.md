@@ -1,49 +1,78 @@
 # VK Music Server
 
-Standalone VK Music server for Home Assistant OS. This project is independent from Music Assistant and does not modify or replace the existing Music Assistant VK Edition add-on.
+Standalone VK Music server for Home Assistant OS. It is independent from Music Assistant and does not modify or replace the existing Music Assistant VK Edition add-on.
 
-## Current state — v0.1.0 scaffold
+## v0.1.1 — first VK integration slice
 
-The repository currently contains the initial application scaffold:
-- Home Assistant add-on metadata for amd64 and aarch64.
-- FastAPI application with health, status, library, playlist, search and playback-state API shapes.
-- WebSocket event endpoint.
-- Persistent SQLite database under /data.
-- Explicit VK client and client-stream adapter boundaries.
-- FFmpeg included in the container image for later server-side playback work.
+This checkpoint adds:
+- VK login based on the same tested `vkpymusic==4.0.2` request API used by the existing VK Edition project.
+- Manual CAPTCHA and verification challenge input in the add-on panel. VK chooses the validation method; the UI can accept SMS/app codes and the final four digits of a verification call.
+- Persistent token storage in `/data/vk_music.sqlite3`, with no one-day deletion timer in this application.
+- Explicit token deletion from the Settings page or `DELETE /api/v1/auth/token`.
+- Personal audio library, playlists and text search API.
+- Server-side proxy for client audio streams. Temporary VK CDN URLs are resolved on the server and not returned to the browser.
+- Home Assistant Ingress interface, protected by Home Assistant authentication.
 
-Not implemented yet: VK login/challenge handling, VK library access, playlist retrieval, real audio stream proxy, browser player, Home Assistant integration and physical/server-side audio outputs. API responses intentionally report these features as unavailable rather than returning fabricated data.
+**Token lifetime:** the add-on keeps the token until you remove it. It cannot force VK to keep the token valid forever; VK may revoke, expire, or restrict it independently. The add-on checks whether the saved token is currently accepted.
 
-## Architecture
+## Setup and disconnect
 
-- API and WebSocket: FastAPI.
-- Persistent state: SQLite in /data/vk_music.sqlite3.
-- VK integration: isolated adapter in app/vk/.
-- Client playback: stream proxy boundary in app/playback/.
-- Server playback: planned output/FFmpeg layer; FFmpeg alone does not provide an audio output device.
-- Add-on ingress: internal port 8099; optional LAN mapping to host port 8098.
+Open **VK Music** from the Home Assistant sidebar (or open the add-on's Ingress page). Enter your VK phone/email and password. Complete CAPTCHA or the verification challenge if VK asks for one.
+
+Only the final access token and its User-Agent are persisted. The password and one-time verification data are held in memory during the login flow and are not written to SQLite.
+
+When connected, the page shows the VK user ID and the time the token was saved. Use **Отключить VK и удалить сохранённый токен** to delete the saved token from add-on storage. The endpoint `DELETE /api/v1/auth/token` does the same.
+
+Deleting the token from this add-on does not guarantee revocation inside VK. For complete revocation, also use the security/application settings in your VK account.
+
+## API
+
+All application endpoints are available through Home Assistant Ingress:
+
+- `GET /health`
+- `GET /api/v1/status`
+- `GET /api/v1/auth/status`
+- `POST /api/v1/auth/start` — JSON: `{"login":"...","password":"..."}`
+- `POST /api/v1/auth/challenge` — JSON: `{"challenge_id":"...","answer":"..."}`
+- `DELETE /api/v1/auth/challenge/{challenge_id}` — discard an unfinished login
+- `DELETE /api/v1/auth/token`
+- `GET /api/v1/library/tracks?limit=50&offset=0`
+- `GET /api/v1/playlists?limit=50&offset=0`
+- `GET /api/v1/search?q=...&limit=50&offset=0`
+- `GET /api/v1/tracks/{owner_id}_{track_id}/stream`
+- `GET /api/v1/playback/state`
+- WebSocket: `/api/v1/events`
+
+Direct host-port publishing is intentionally disabled. Current Home Assistant add-on guidance recommends Ingress for web interfaces and restricting requests to the Supervisor proxy address; this server accepts Ingress traffic and loopback only.
+
+## Current limits
+
+- Client-side stream proxy API is implemented, but a complete browser player UI is still planned.
+- A Home Assistant media_player integration and mobile app are separate roadmap tasks.
+- Server-side playback to physical audio outputs is not yet implemented. FFmpeg alone is not an audio output device.
+- VK audio availability depends on the account and VK's API access rules.
 
 ## Local development
 
     python -m venv .venv
     . .venv/bin/activate
     pip install -r requirements.txt
-    pip install pytest httpx
+    pip install pytest
     VKMS_DATA_DIR=./data uvicorn app.main:app --host 0.0.0.0 --port 8099
 
-Health check: GET /health
-Interactive API docs: /docs
+Run checks:
+
+    VKMS_DATA_DIR=./data pytest -q
+    docker build --tag vk-music-server:local .
 
 ## Data and upgrades
 
-Persistent application data belongs in /data, which is mapped by the add-on. Never store VK passwords, one-time codes or CAPTCHA answers. Access tokens must not be exposed by status endpoints or logs. Database schema changes must be versioned and preserve existing data during upgrades.
+The add-on maps `/data` persistently. Database migrations preserve existing records; do not remove the add-on's data directory when updating. Keep Home Assistant backups. The SQLite file is created with restrictive file permissions where supported. Tokens are secrets: do not share database files or diagnostic backups publicly.
 
 ## Playback modes
 
-1. Client-side stream: server obtains a VK track stream and serves it to Web, mobile or other clients.
-2. Server-side playback: server feeds decoded audio to a selected output through a dedicated output adapter.
-
-Both modes are architectural goals. Neither is claimed as complete in this scaffold.
+1. **Client-side stream:** implemented proxy supplies audio bytes to clients without exposing the temporary VK CDN URL.
+2. **Server-side playback:** planned output/FFmpeg layer. A dedicated sink/transport implementation and device testing are still required.
 
 ## License
 
