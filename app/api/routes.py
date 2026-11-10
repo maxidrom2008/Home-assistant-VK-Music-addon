@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from vkpymusic import Service, VkMobileClient
 from vkpymusic.vk_api import VkApiException
 
+from app.playback.manager import PlaybackError
 from app.playback.stream import proxy_audio
 from app.storage.database import delete_credentials, get_credentials
 from app.vk.auth import VKAuthError
@@ -12,6 +13,7 @@ from app.vk.client import (
     list_playlists,
     make_service,
     resolve_stream,
+    resolve_track,
     search_tracks,
 )
 
@@ -35,6 +37,10 @@ class AuthChallengeRefresh(BaseModel):
 
 class TokenImport(BaseModel):
     access_token: str = Field(min_length=5, max_length=4096)
+
+
+class ServerPlaybackRequest(BaseModel):
+    track_id: str = Field(pattern=r"^-?[0-9]+_-?[0-9]+$", max_length=64)
 
 
 @router.get("/status")
@@ -125,6 +131,7 @@ async def auth_challenge_cancel(challenge_id: str, request: Request) -> dict[str
 @router.delete("/auth/token")
 async def auth_delete(request: Request) -> dict[str, object]:
     request.app.state.auth_manager.cancel_all()
+    await request.app.state.playback_manager.stop()
     deleted = delete_credentials(request.app.state.database_path)
     return {"deleted": deleted, "authenticated": False, "state": "not_configured"}
 
@@ -188,8 +195,54 @@ async def search(
 
 
 @router.get("/playback/state")
-async def playback_state() -> dict[str, object]:
-    return {"state": "idle", "mode": "client_stream", "track": None, "output": None}
+async def playback_state(request: Request) -> dict[str, object]:
+    return request.app.state.playback_manager.get_state()
+
+
+@router.post("/playback/server/play")
+async def playback_server_play(
+    payload: ServerPlaybackRequest,
+    request: Request,
+) -> dict[str, object]:
+    credentials = get_credentials(request.app.state.database_path)
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Сначала подключите VK")
+    try:
+        resolved = await resolve_track(make_service(credentials), payload.track_id)
+        return await request.app.state.playback_manager.play(
+            resolved["stream_url"],
+            credentials["user_agent"],
+            resolved["track"],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PlaybackError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except VkApiException as exc:
+        raise HTTPException(status_code=502, detail=f"VK API error {getattr(exc, 'error_code', 'unknown')}") from exc
+
+
+@router.post("/playback/server/pause")
+async def playback_server_pause(request: Request) -> dict[str, object]:
+    try:
+        return await request.app.state.playback_manager.pause()
+    except PlaybackError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/playback/server/resume")
+async def playback_server_resume(request: Request) -> dict[str, object]:
+    try:
+        return await request.app.state.playback_manager.resume()
+    except PlaybackError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/playback/server/stop")
+async def playback_server_stop(request: Request) -> dict[str, object]:
+    return await request.app.state.playback_manager.stop()
 
 
 @router.get("/tracks/{track_id}/stream")

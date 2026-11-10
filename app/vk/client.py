@@ -53,11 +53,19 @@ async def list_playlists(service: Service, limit: int, offset: int) -> list[dict
     return [playlist_to_dict(item) for item in items]
 
 
-async def resolve_stream(service: Service, track_id: str) -> str:
+async def resolve_track(service: Service, track_id: str) -> dict[str, Any]:
     parts = track_id.split("_", 1)
     if len(parts) != 2 or not all(parts):
         raise ValueError("Некорректный идентификатор VK-трека")
     songs = await service.get_songs_by_id_async([track_id])
     if not songs or not getattr(songs[0], "url", None):
         raise LookupError("VK не предоставил аудиопоток для этого трека")
-    return str(songs[0].url)
+    return {
+        "track": song_to_dict(songs[0]),
+        "stream_url": str(songs[0].url),
+    }
+
+
+async def resolve_stream(service: Service, track_id: str) -> str:
+    result = await resolve_track(service, track_id)
+    return result["stream_url"]
