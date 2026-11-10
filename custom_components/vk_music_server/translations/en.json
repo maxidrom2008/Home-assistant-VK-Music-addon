@@ -1,0 +1,21 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to VK Music Server",
+        "description": "Copy the internal URL shown in the VK Music Server add-on panel.",
+        "data": {
+          "base_url": "Internal add-on URL"
+        }
+      }
+    },
+    "error": {
+      "invalid_url": "Enter a valid internal HTTP or HTTPS URL.",
+      "cannot_connect": "Cannot connect to the add-on. Check that it is running and that the URL is correct.",
+      "not_vk_music_server": "The URL does not point to VK Music Server."
+    },
+    "abort": {
+      "already_configured": "This VK Music Server is already configured."
+    }
+  }
+}

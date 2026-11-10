@@ -1,0 +1,21 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Подключение к VK Music Server",
+        "description": "Скопируйте внутренний URL из панели add-on VK Music Server.",
+        "data": {
+          "base_url": "Внутренний URL add-on"
+        }
+      }
+    },
+    "error": {
+      "invalid_url": "Введите корректный внутренний HTTP- или HTTPS-адрес.",
+      "cannot_connect": "Не удалось подключиться к add-on. Проверьте, что он запущен и URL указан верно.",
+      "not_vk_music_server": "По этому адресу не найден VK Music Server."
+    },
+    "abort": {
+      "already_configured": "Этот VK Music Server уже подключён."
+    }
+  }
+}
