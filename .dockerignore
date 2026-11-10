@@ -1,0 +1,25 @@
+# VCS and local tooling
+.git
+.github
+.venv
+venv
+__pycache__
+**/__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+
+# Node/browser build dependencies are installed in the dedicated Docker build stage
+node_modules
+**/node_modules
+app/web/app.bundle.js
+npm-debug.log*
+
+# Local state and tests do not belong in the runtime image
+data
+tests
+*.sqlite3
+*.db
