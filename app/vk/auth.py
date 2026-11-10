@@ -162,6 +162,12 @@ class VKAuthManager:
         self.pending.pop(challenge_id, None)
         return {"state": "authenticated", "authenticated": True, "user_id": user_id or None}
 
+    def cancel(self, challenge_id: str) -> bool:
+        session = self.pending.pop(challenge_id, None)
+        if session:
+            session["password"] = ""
+        return session is not None
+
     def cancel_all(self) -> None:
         for session in self.pending.values():
             session["password"] = ""
