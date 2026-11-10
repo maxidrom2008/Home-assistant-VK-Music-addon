@@ -27,9 +27,13 @@ This checkpoint adds:
 
 ## Home Assistant media_player integration
 
-The repository includes a companion custom integration at `custom_components/vk_music_server`. Add this GitHub repository to HACS as a custom repository of category **Integration**, install **VK Music Server**, and restart Home Assistant.
+The repository includes a companion custom integration at `custom_components/vk_music_server`.
+
+**Manual installation (available now):** copy the folder `custom_components/vk_music_server` into `/config/custom_components/vk_music_server` on Home Assistant, then restart Home Assistant.
 
 After connecting the VK account in the add-on panel, copy the **internal URL** shown under **Интеграция Home Assistant**. Add the VK Music Server integration from **Settings → Devices & services → Add integration** and paste that URL (for example, `http://<supervisor-hostname>:8099`). The integration creates a `media_player.vk_music_server` entity with playback, pause, stop and media browsing for the user's library and playlists.
+
+HACS package structure and metadata are included, but automated HACS validation deliberately skips the license and repository-topic checks until the repository owner chooses a source license and adds GitHub topics. The project is not yet submitted to the default HACS catalog.
 
 The internal URL is not published on a host port. The add-on allows API access from Home Assistant Core's host-network gateway and the Supervisor/Ingress proxy only; other add-on containers and LAN clients are rejected. The add-on reads its own hostname from `GET /addons/self/info` using the limited Supervisor token.
 
@@ -102,4 +106,4 @@ The add-on maps /data persistently and requests the Home Assistant shared audio 
 
 ## License
 
-To be decided.
+No source license has been selected by the repository owner yet. Until then, the code is not offered under an OSI-approved open-source license.
