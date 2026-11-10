@@ -5,8 +5,8 @@
   "config_flow": true,
   "documentation": "https://github.com/maxidrom2008/Home-assistant-VK-Music-addon",
   "integration_type": "service",
-  "issue_tracker": "https://github.com/maxidrom2008/Home-assistant-VK-Music-addon/issues",
   "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/maxidrom2008/Home-assistant-VK-Music-addon/issues",
   "requirements": [],
   "version": "0.1.2"
 }
