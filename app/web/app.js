@@ -329,7 +329,7 @@ async function showChallenge(data) {
     }
     $("challengeHint").textContent = "Пройдите проверку в блоке VK. После её завершения нажмите «Проверить и продолжить». Ссылка одноразовая.";
   } catch (err) {
-    $("message").textContent = "Не удалось загрузить виджет VK CAPTCHA: " + (err.message || String(err)) + ". Проверьте доступ браузера к esm.sh и обновите ссылку CAPTCHA.";
+    $("message").textContent = "Не удалось загрузить виджет VK CAPTCHA: " + (err.message || String(err)) + ". Проверьте, что сборка интерфейса установлена; при необходимости обновите ссылку CAPTCHA.";
   }
 }
 async function submitChallenge() {
@@ -337,7 +337,7 @@ async function submitChallenge() {
   let answer = "";
   if (challengeType === "browser_captcha") {
     if (!captchaWidget) {
-      $("message").textContent = "Виджет CAPTCHA ещё не загружен. Обновите ссылку или разрешите загрузку внешнего скрипта.";
+      $("message").textContent = "Виджет CAPTCHA ещё не загружен. Перезапустите страницу add-on и запросите новую ссылку.";
       return;
     }
     try {

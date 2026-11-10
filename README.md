@@ -45,7 +45,7 @@ Add this repository to the Home Assistant Apps store:
 
 The repository builds and publishes a multi-architecture GHCR image for `amd64` and `aarch64` after the test job succeeds. The add-on manifest points to `ghcr.io/maxidrom2008/vk-music-server` and the image tag is kept in sync with the manifest version.
 
-**First publication:** GitHub may create a new Container Registry package with private visibility. Open the repository's **Packages → vk-music-server → Package settings** and make the package **Public** so Home Assistant can pull the image without registry credentials. The repository itself can retain its existing visibility.
+**First publication:** check **Packages → vk-music-server → Package settings** in GitHub. If the newly created GHCR package is private, change its visibility to **Public** so Home Assistant can pull the image without registry credentials. The repository itself can retain its existing visibility.
 
 After adding the repository, install **VK Music Server** from the Apps store and open its panel.
 

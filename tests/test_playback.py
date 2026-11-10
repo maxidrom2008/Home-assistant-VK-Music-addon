@@ -8,10 +8,12 @@ from app.playback.manager import PlaybackError, ServerPlaybackManager
 
 
 class FakeProcess:
-    def __init__(self) -> None:
-        self.returncode = None
+    def __init__(self, returncode=None) -> None:
+        self.returncode = returncode
         self.signals: list[int] = []
         self._done = asyncio.Event()
+        if returncode is not None:
+            self._done.set()
 
     async def wait(self) -> int:
         await self._done.wait()
@@ -77,4 +79,30 @@ def test_server_playback_rejects_non_https_streams() -> None:
         player = ServerPlaybackManager()
         with pytest.raises(PlaybackError):
             await player.play("http://untrusted.example/audio", "ua", {"id":"1_2"})
+    asyncio.run(scenario())
+
+
+
+def test_server_playback_does_not_report_failed_ffmpeg_start_as_playing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    failed_process = FakeProcess(returncode=1)
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        return failed_process
+
+    monkeypatch.setattr(playback.asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+
+    async def scenario():
+        player = ServerPlaybackManager()
+        state = await player.play(
+            "https://cdn.vk.example/audio.mp3",
+            "VK test UA",
+            {"id":"1_2","title":"Test","artist":"Artist","duration":180},
+        )
+        assert state["state"] == "error"
+        assert state["track"] is None
+        assert "PulseAudio" in state["error"]
+        assert player.get_state()["state"] == "error"
+
     asyncio.run(scenario())

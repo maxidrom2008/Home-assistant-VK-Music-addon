@@ -93,3 +93,12 @@ def test_supervisor_internal_connection_details_are_returned_only_when_available
     assert response.status_code == 200
     assert response.json()["base_url"] == "http://repo-vk-music-server:8099"
     assert response.json()["available"] is True
+
+
+
+def test_browser_script_has_no_runtime_external_captcha_cdn_dependency() -> None:
+    from pathlib import Path
+
+    script = Path("app/web/app.js").read_text(encoding="utf-8")
+    assert 'from "@vkid/captcha"' in script
+    assert "esm.sh" not in script

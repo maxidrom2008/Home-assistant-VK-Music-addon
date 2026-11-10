@@ -11,6 +11,9 @@ class PlaybackError(Exception):
     """A server-side playback operation could not be completed."""
 
 
+PLAYBACK_STARTUP_GRACE_SECONDS = 0.4
+
+
 class ServerPlaybackManager:
     """Own one FFmpeg process connected to the Supervisor audio service."""
 
@@ -102,6 +105,24 @@ class ServerPlaybackManager:
                 "error": None,
             }
             self._monitor_task = asyncio.create_task(self._watch(process))
+            # Give FFmpeg a brief opportunity to open its input and PulseAudio sink.
+            # A process that exits immediately must not be reported as playing.
+            await asyncio.sleep(PLAYBACK_STARTUP_GRACE_SECONDS)
+            if process.returncode is not None:
+                self._process = None
+                self._position_mark = None
+                self._state = {
+                    "state": "error",
+                    "mode": "server",
+                    "track": None,
+                    "output": "Home Assistant Audio (PulseAudio)",
+                    "error": (
+                        "FFmpeg не смог открыть аудиопоток или PulseAudio. "
+                        "Проверьте доступность трека и выбранное устройство вывода."
+                    ),
+                }
+                self._position = 0.0
+                return self.get_state()
             return self.get_state()
 
     async def _watch(self, process: asyncio.subprocess.Process) -> None:
