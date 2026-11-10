@@ -69,7 +69,7 @@ All application endpoints are available through Home Assistant Ingress:
 - POST /api/v1/playback/server/stop
 - WebSocket: /api/v1/events
 
-Direct host-port publishing is intentionally disabled. This server accepts Home Assistant Ingress traffic and loopback only.
+Direct host-port publishing is intentionally disabled. API access is limited to the Home Assistant Core host-network gateway, the Supervisor/Ingress proxy, and loopback. Other add-on containers and LAN clients are rejected.
 
 ## Current limits
 

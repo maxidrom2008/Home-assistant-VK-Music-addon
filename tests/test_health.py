@@ -75,3 +75,20 @@ def test_playlist_tracks_endpoint_keeps_playlist_access_key_server_side(monkeypa
     assert captured == [("42", "123", 10, 20)]
     assert response.json()["has_more"] is False
     assert "access_key" not in response.text
+
+
+
+def test_supervisor_internal_connection_details_are_returned_only_when_available() -> None:
+    with TestClient(app) as client:
+        app.state.supervisor_info = {
+            "hostname": "repo-vk-music-server",
+            "slug": "repo_vk_music_server",
+        }
+        response = client.get(
+            "/api/v1/integration/info",
+            headers={"host":"repo-vk-music-server:8099"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["base_url"] == "http://repo-vk-music-server:8099"
+    assert response.json()["available"] is True
