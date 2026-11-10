@@ -2,7 +2,7 @@
 
 ## 0.1.1
 - Integrate vkpymusic 4.0.2 for VK authorization and media requests.
-- Add interactive CAPTCHA and VK verification challenge endpoints.
+- Add interactive CAPTCHA and VK verification challenge endpoints, plus manual token import for browser-only CAPTCHA flows.
 - Persist the final VK access token under /data with no application-side 24-hour TTL.
 - Add a settings panel and an explicit disconnect/delete-token action.
 - Add personal library, playlists, text search and a server-side stream proxy.
