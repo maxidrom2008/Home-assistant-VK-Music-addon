@@ -1,0 +1,1 @@
+"""VK provider integration boundary."""
