@@ -1,6 +1,7 @@
 """Versioned REST API."""
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
+from vkpymusic import Service, VkMobileClient
 from vkpymusic.vk_api import VkApiException
 
 from app.playback.stream import proxy_audio
@@ -25,6 +26,10 @@ class AuthStart(BaseModel):
 class AuthChallenge(BaseModel):
     challenge_id: str = Field(min_length=16, max_length=128)
     answer: str = Field(min_length=1, max_length=128)
+
+
+class TokenImport(BaseModel):
+    access_token: str = Field(min_length=5, max_length=4096)
 
 
 @router.get("/status")
@@ -65,6 +70,33 @@ async def auth_challenge(payload: AuthChallenge, request: Request) -> dict[str, 
         return await request.app.state.auth_manager.submit(payload.challenge_id, payload.answer)
     except (ValueError, VKAuthError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/auth/token")
+async def auth_token_import(payload: TokenImport, request: Request) -> dict[str, object]:
+    token = payload.access_token.strip()
+    service = Service(user_agent=VkMobileClient.user_agent, token=token)
+    try:
+        if not await service.is_token_valid_async():
+            raise HTTPException(status_code=400, detail="VK не принимает этот токен")
+        user = await service.get_user_info_async()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Не удалось проверить токен VK ({type(exc).__name__})",
+        ) from exc
+    user_id = str(getattr(user, "userid", "") or "")
+    from app.storage.database import save_credentials
+    save_credentials(
+        request.app.state.database_path,
+        token,
+        VkMobileClient.user_agent,
+        user_id or None,
+    )
+    request.app.state.auth_manager.cancel_all()
+    return {"state": "authenticated", "authenticated": True, "user_id": user_id or None}
 
 
 @router.delete("/auth/challenge/{challenge_id}")
