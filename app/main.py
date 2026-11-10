@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from app.api.routes import router as api_router
 from app.api.websocket import router as websocket_router
 from app.config import settings
+from app.security import IngressOnlyMiddleware
 from app.storage.database import initialize
 from app.vk.auth import VKAuthManager
 
@@ -25,6 +26,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="VK Music Server", version="0.1.1", lifespan=lifespan)
+app.add_middleware(IngressOnlyMiddleware)
 app.include_router(api_router)
 app.include_router(websocket_router)
 
