@@ -4,3 +4,6 @@ __pycache__/
 .venv/
 data/
 .env
+
+# Generated browser bundle (built in Docker and CI)
+app/web/app.bundle.js

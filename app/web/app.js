@@ -1,3 +1,5 @@
+import { CaptchaWidget } from "@vkid/captcha";
+
 const api = p => new URL("api/v1/" + p, document.baseURI).toString();
 const $ = id => document.getElementById(id);
 let challengeId = null;
@@ -316,11 +318,9 @@ async function showChallenge(data) {
   }
 
   try {
-    // Load the pinned VK ID CAPTCHA widget only when VK actually asks for it.
-    const sdk = await import("https://esm.sh/@vkid/captcha@2.0.0");
+    // The VK ID CAPTCHA SDK is bundled into the add-on image.
     if (challengeId !== targetChallengeId) return;
-    if (typeof sdk.CaptchaWidget !== "function") throw new Error("В SDK отсутствует CaptchaWidget");
-    const widget = new sdk.CaptchaWidget();
+    const widget = new CaptchaWidget();
     captchaWidget = widget;
     await widget.render({link:c.link, container:"#vkCaptcha"});
     if (challengeId !== targetChallengeId) {

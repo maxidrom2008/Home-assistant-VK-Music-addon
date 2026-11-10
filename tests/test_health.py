@@ -49,8 +49,9 @@ def test_web_player_script_is_served() -> None:
     assert page.status_code == 200
     assert 'src="app.js"' in page.text
     assert script.status_code == 200
-    assert "function loadTracks" in script.text
-    assert "function playTrack" in script.text
+    assert "loadTracks" in script.text
+    assert "playTrack" in script.text
+    assert "CaptchaWidget" in script.text
 
 
 def test_playlist_tracks_endpoint_keeps_playlist_access_key_server_side(monkeypatch) -> None:

@@ -1,3 +1,10 @@
+FROM node:22-slim AS web-build
+WORKDIR /web
+COPY app/web/package.json ./package.json
+RUN npm install --no-save --package-lock=false --no-audit --no-fund
+COPY app/web/app.js ./app.js
+RUN npm run build
+
 FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 VKMS_DATA_DIR=/data VKMS_HOST=0.0.0.0 VKMS_PORT=8099
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg libpulse0 pulseaudio-utils \
@@ -7,6 +14,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
+COPY --from=web-build /web/app.bundle.js ./app/web/app.bundle.js
 RUN mkdir -p /data
 EXPOSE 8099
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8099"]

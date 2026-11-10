@@ -15,6 +15,7 @@
 - Add the companion Home Assistant media_player integration with media browsing for personal tracks and playlists.
 - Discover the app's actual internal DNS hostname through Supervisor and allow API access from Home Assistant Core without publishing a LAN port.
 - Publish tested amd64 and aarch64 Home Assistant app images to GHCR and configure the app manifest to use the multi-arch image.
+- Bundle the pinned VK ID CAPTCHA SDK into the app image instead of loading it from a browser-side CDN.
 
 ## 0.1.1
 - Integrate vkpymusic 4.0.2 for VK authorization and media requests.

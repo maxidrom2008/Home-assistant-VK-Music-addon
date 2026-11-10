@@ -10,7 +10,7 @@ The authorization flow supports both CAPTCHA formats currently returned by VK:
 - **Legacy image CAPTCHA:** the server displays captcha_img and sends the entered answer as captcha_sid / captcha_key.
 - **2FA:** SMS, app code, the last four digits of a verification call, and supported push/device approval are handled; VK chooses the verification channel.
 
-Browser CAPTCHA links are one-use and short-lived. The panel can request a fresh link if a challenge expires or the browser tab was suspended. Links are only accepted from the HTTPS VK ID hosts id.vk.com and id.vk.ru; arbitrary redirect URLs are not opened. The app does not use Selenium, headless browsers, automatic solvers or CAPTCHA bypasses.
+Browser CAPTCHA links are one-use and short-lived. The panel can request a fresh link if a challenge expires or the browser tab was suspended. Links are only accepted from the HTTPS VK ID hosts id.vk.com and id.vk.ru; arbitrary redirect URLs are not opened. The VK ID CAPTCHA SDK is bundled into the add-on image, so the login page does not fetch a JavaScript SDK from an external CDN. The app does not use Selenium, headless browsers, automatic solvers or CAPTCHA bypasses.
 
 ## v0.1.1 — first VK integration slice
 
@@ -33,7 +33,7 @@ The repository includes a companion custom integration at `custom_components/vk_
 
 After connecting the VK account in the add-on panel, copy the **internal URL** shown under **Интеграция Home Assistant**. Add the VK Music Server integration from **Settings → Devices & services → Add integration** and paste that URL (for example, `http://<supervisor-hostname>:8099`). The integration creates a `media_player.vk_music_server` entity with playback, pause, stop and media browsing for the user's library and playlists.
 
-HACS package structure and metadata are included, but automated HACS validation deliberately skips the license and repository-topic checks until the repository owner chooses a source license and adds GitHub topics. The project is not yet submitted to the default HACS catalog. HACS validation skips license and topics checks until the repository owner chooses a source license and adds repository topics.
+HACS package structure and metadata are included, but the project is not submitted to the default HACS catalog. Automated HACS validation skips the license and repository-topic checks until the repository owner chooses a source license and adds GitHub topics.
 
 The internal URL is not published on a host port. The add-on allows API access from Home Assistant Core's host-network gateway and the Supervisor/Ingress proxy only; other add-on containers and LAN clients are rejected. The add-on reads its own hostname from `GET /addons/self/info` using the limited Supervisor token.
 
@@ -100,6 +100,10 @@ Direct host-port publishing is intentionally disabled. API access is limited to 
     . .venv/bin/activate
     pip install -r requirements.txt
     pip install pytest
+    cd app/web
+    npm install --no-save --package-lock=false --no-audit --no-fund
+    npm run build
+    cd ../..
     VKMS_DATA_DIR=./data uvicorn app.main:app --host 0.0.0.0 --port 8099
 
 Run checks:

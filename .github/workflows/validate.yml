@@ -22,16 +22,23 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt pytest
-      - name: Run tests
-        env:
-          VKMS_DATA_DIR: ${{ runner.temp }}/vkms-test-data
-        run: pytest -q
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Install and bundle browser dependencies
+        working-directory: app/web
+        run: |
+          npm install --no-save --package-lock=false --no-audit --no-fund
+          npm run build
       - name: Check browser JavaScript syntax
-        run: node --check app/web/app.js
+        run: |
+          node --check app/web/app.js
+          node --check app/web/app.bundle.js
+      - name: Run tests
+        env:
+          VKMS_DATA_DIR: ${{ runner.temp }}/vkms-test-data
+        run: pytest -q
       - name: Compile Python sources
         run: python -m compileall -q app custom_components
 

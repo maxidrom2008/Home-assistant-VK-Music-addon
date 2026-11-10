@@ -70,8 +70,9 @@ async def root():
 
 @app.get("/app.js")
 async def web_app_script():
+    bundle = WEB_ROOT / "app.bundle.js"
     return FileResponse(
-        WEB_ROOT / "app.js",
+        bundle if bundle.is_file() else WEB_ROOT / "app.js",
         media_type="text/javascript; charset=utf-8",
         headers={"cache-control": "no-cache"},
     )
