@@ -11,6 +11,7 @@ let hasMoreTracks = false;
 let loadSequence = 0;
 let currentTrackIndex = -1;
 let outputMode = "browser";
+let currentPlaylistId = null;
 
 async function call(path, options={}) {
   const response = await fetch(api(path), {headers:{"Content-Type":"application/json"}, ...options});
@@ -71,9 +72,58 @@ function formatDuration(seconds) {
   const value = Math.max(0, Number(seconds) || 0);
   return Math.floor(value / 60) + ":" + String(Math.floor(value % 60)).padStart(2, "0");
 }
+function renderPlaylists(items) {
+  const list = $("trackList");
+  list.replaceChildren();
+  $("backToPlaylists").hidden = true;
+  $("loadMore").style.display = "none";
+  $("libraryMessage").textContent = items.length
+    ? "Плейлисты аккаунта VK: " + items.length
+    : "Плейлисты не найдены.";
+  for (const playlist of items) {
+    const row = document.createElement("div");
+    row.className = "trackRow";
+    const meta = document.createElement("div");
+    meta.className = "trackMeta";
+    const title = document.createElement("div");
+    title.className = "trackTitle";
+    title.textContent = playlist.title || "Плейлист без названия";
+    const description = document.createElement("div");
+    description.className = "trackArtist";
+    description.textContent = playlist.description || "Плейлист VK";
+    meta.append(title, description);
+    const open = document.createElement("button");
+    open.type = "button";
+    open.textContent = "Открыть";
+    open.addEventListener("click", () => {
+      currentPlaylistId = playlist.id;
+      loadTracks("playlist", false);
+    });
+    row.append(meta, open);
+    list.append(row);
+  }
+}
+async function loadPlaylists() {
+  const sequence = ++loadSequence;
+  currentMode = "playlists";
+  currentPlaylistId = null;
+  currentItems = [];
+  $("trackList").replaceChildren();
+  $("loadMore").style.display = "none";
+  $("backToPlaylists").hidden = true;
+  $("libraryMessage").textContent = "Загружаю плейлисты…";
+  try {
+    const data = await call("playlists?limit=100&offset=0");
+    if (sequence !== loadSequence) return;
+    renderPlaylists(data.items || []);
+  } catch (err) {
+    if (sequence === loadSequence) $("libraryMessage").textContent = err.message;
+  }
+}
 function renderTracks() {
   const list = $("trackList");
   list.replaceChildren();
+  $("backToPlaylists").hidden = currentMode !== "playlist";
   currentItems.forEach((track, index) => {
     const row = document.createElement("div");
     row.className = "trackRow";
@@ -116,7 +166,9 @@ async function loadTracks(mode="library", append=false) {
   const params = new URLSearchParams({limit:String(PAGE_SIZE),offset:String(offset)});
   const endpoint = mode === "search"
     ? "search?q=" + encodeURIComponent(query) + "&" + params.toString()
-    : "library/tracks?" + params.toString();
+    : mode === "playlist"
+      ? "playlists/" + encodeURIComponent(currentPlaylistId || "") + "/tracks?" + params.toString()
+      : "library/tracks?" + params.toString();
   try {
     const data = await call(endpoint);
     if (sequence !== loadSequence) return;
@@ -125,7 +177,11 @@ async function loadTracks(mode="library", append=false) {
     currentOffset = offset + items.length;
     hasMoreTracks = Boolean(data.has_more ?? (items.length === PAGE_SIZE));
     $("libraryMessage").textContent = currentItems.length
-      ? (mode === "search" ? "Результаты поиска: " : "В моей музыке: ") + currentItems.length
+      ? (mode === "search"
+          ? "Результаты поиска: "
+          : mode === "playlist"
+            ? "Треки плейлиста: "
+            : "В моей музыке: ") + currentItems.length
       : "Треки не найдены.";
     renderTracks();
   } catch (err) {
@@ -377,6 +433,8 @@ $("cancelButton").addEventListener("click",async()=>{
   $("message").textContent="Вход отменён.";
 });
 $("libraryButton").addEventListener("click", () => loadTracks("library", false));
+$("playlistsButton").addEventListener("click", loadPlaylists);
+$("backToPlaylists").addEventListener("click", loadPlaylists);
 $("clearSearchButton").addEventListener("click", () => {
   $("searchQuery").value = "";
   loadTracks("library", false);

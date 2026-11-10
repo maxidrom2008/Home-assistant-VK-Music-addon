@@ -11,6 +11,7 @@
 - Add a working browser music player with library browsing, search, pagination and next/previous track controls.
 - Add server-side FFmpeg playback through the Supervisor-managed PulseAudio service, with play, pause, resume and stop controls.
 - Enable the Home Assistant add-on audio interface and verify FFmpeg PulseAudio output support during image build.
+- Add private playlist-track resolution and web playlist browsing without exposing VK playlist access keys.
 
 ## 0.1.1
 - Integrate vkpymusic 4.0.2 for VK authorization and media requests.

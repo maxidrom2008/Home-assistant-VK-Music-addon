@@ -50,6 +50,7 @@ All application endpoints are available through Home Assistant Ingress:
 - DELETE /api/v1/auth/token
 - GET /api/v1/library/tracks?limit=50&offset=0
 - GET /api/v1/playlists?limit=50&offset=0
+- GET /api/v1/playlists/{owner_id}_{playlist_id}/tracks?limit=50&offset=0
 - GET /api/v1/search?q=...&limit=50&offset=0
 - GET /api/v1/tracks/{owner_id}_{track_id}/stream
 - GET /api/v1/playback/state
@@ -63,7 +64,7 @@ Direct host-port publishing is intentionally disabled. This server accepts Home 
 
 ## Current limits
 
-- The web panel includes personal-library browsing, track search, pagination and browser playback through the server-side stream proxy. The browser JavaScript is checked in CI.
+- The web panel includes personal-library browsing, playlist browsing and track playback, search, pagination, and browser playback through the server-side stream proxy. Playlist access keys stay inside the server. The browser JavaScript is checked in CI.
 - A native Home Assistant media_player integration and a mobile app are separate roadmap tasks.
 - Server-side playback uses FFmpeg and the Home Assistant shared PulseAudio service. Select an output device in the add-on Audio settings; actual sound output depends on HAOS exposing a working sink.
 - VK audio availability depends on the account and VK's API access rules. CAPTCHA appearance is controlled by VK.

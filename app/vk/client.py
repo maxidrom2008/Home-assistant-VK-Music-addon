@@ -53,6 +53,51 @@ async def list_playlists(service: Service, limit: int, offset: int) -> list[dict
     return [playlist_to_dict(item) for item in items]
 
 
+async def list_playlist_tracks(
+    service: Service,
+    owner_id: str,
+    playlist_id: str,
+    limit: int,
+    offset: int,
+) -> list[dict[str, Any]]:
+    """Resolve a user's playlist on the server so its access key stays private."""
+    if not owner_id.lstrip("-").isdigit() or not playlist_id.isdigit():
+        raise ValueError("Некорректный идентификатор плейлиста")
+    user = await service.get_user_info_async()
+    if str(user.userid) != owner_id:
+        raise LookupError("Можно открывать только плейлисты текущего аккаунта")
+    found = None
+    playlist_offset = 0
+    # Scan paginated playlist metadata without exposing access_key to the browser.
+    while playlist_offset < 10_000:
+        playlists = await service.get_playlists_by_userid_async(
+            user.userid, count=100, offset=playlist_offset
+        )
+        if not playlists:
+            break
+        found = next(
+            (
+                item for item in playlists
+                if str(getattr(item, "owner_id", "")) == owner_id
+                and str(getattr(item, "playlist_id", "")) == playlist_id
+            ),
+            None,
+        )
+        if found is not None or len(playlists) < 100:
+            break
+        playlist_offset += len(playlists)
+    if found is None:
+        raise LookupError("Плейлист не найден в библиотеке VK")
+    songs = await service.get_songs_by_playlist_id_async(
+        found.owner_id,
+        found.playlist_id,
+        getattr(found, "access_key", "") or "",
+        count=limit,
+        offset=offset,
+    )
+    return [song_to_dict(song) for song in songs]
+
+
 async def resolve_track(service: Service, track_id: str) -> dict[str, Any]:
     parts = track_id.split("_", 1)
     if len(parts) != 2 or not all(parts):

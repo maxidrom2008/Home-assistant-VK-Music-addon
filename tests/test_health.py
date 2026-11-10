@@ -51,3 +51,27 @@ def test_web_player_script_is_served() -> None:
     assert script.status_code == 200
     assert "function loadTracks" in script.text
     assert "function playTrack" in script.text
+
+
+def test_playlist_tracks_endpoint_keeps_playlist_access_key_server_side(monkeypatch) -> None:
+    import app.api.routes as routes
+
+    captured = []
+
+    async def fake_playlist_tracks(service, owner_id, playlist_id, limit, offset):
+        captured.append((owner_id, playlist_id, limit, offset))
+        return [{"id": "42_7", "title": "Playlist song", "artist": "Artist", "duration": 200}]
+
+    monkeypatch.setattr(routes, "get_credentials", lambda path: {
+        "access_token": "test-token", "user_agent": "test-agent", "user_id": "42"
+    })
+    monkeypatch.setattr(routes, "make_service", lambda credentials: object())
+    monkeypatch.setattr(routes, "list_playlist_tracks", fake_playlist_tracks)
+
+    with TestClient(app) as client:
+        response = client.get("/api/v1/playlists/42_123/tracks?limit=10&offset=20")
+
+    assert response.status_code == 200
+    assert captured == [("42", "123", 10, 20)]
+    assert response.json()["has_more"] is False
+    assert "access_key" not in response.text

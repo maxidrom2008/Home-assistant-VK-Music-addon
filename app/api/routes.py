@@ -11,6 +11,7 @@ from app.vk.auth import VKAuthError
 from app.vk.client import (
     list_my_tracks,
     list_playlists,
+    list_playlist_tracks,
     make_service,
     resolve_stream,
     resolve_track,
@@ -171,6 +172,33 @@ async def playlists(
     return {
         "items": items, "limit": limit, "offset": offset, "available": True,
         "has_more": len(items) == limit,
+    }
+
+
+@router.get("/playlists/{owner_id}_{playlist_id}/tracks")
+async def playlist_tracks(
+    owner_id: str,
+    playlist_id: str,
+    request: Request,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+) -> dict[str, object]:
+    credentials = get_credentials(request.app.state.database_path)
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Сначала подключите VK в настройках")
+    try:
+        items = await list_playlist_tracks(
+            make_service(credentials), owner_id, playlist_id, limit, offset
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except VkApiException as exc:
+        raise HTTPException(status_code=502, detail=f"VK API error {getattr(exc, 'error_code', 'unknown')}") from exc
+    return {
+        "items": items, "limit": limit, "offset": offset,
+        "available": True, "has_more": len(items) == limit,
     }
 
 
