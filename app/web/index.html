@@ -31,6 +31,12 @@ small{display:block;color:#9ca3af;margin-top:10px}
 <input id="password" type="password" autocomplete="current-password" required>
 <button id="loginButton" type="submit">Подключить VK</button>
 </form>
+<section id="manualToken">
+<p class="muted">Не получается пройти CAPTCHA в браузере VK? Можно подключить уже полученный VK access token. Он проверяется перед сохранением.</p>
+<label for="tokenValue">VK access token</label>
+<input id="tokenValue" type="password" autocomplete="off" spellcheck="false">
+<button id="tokenButton" class="secondary" type="button">Проверить и сохранить токен</button>
+</section>
 <section id="challenge">
 <h2 id="challengeTitle">Подтверждение VK</h2>
 <p id="challengeHint" class="muted"></p>
@@ -63,14 +69,17 @@ async function refreshStatus() {
       $("status").textContent = "VK подключён" + (s.user_id ? " · ID " + s.user_id : "") + (s.updated_at ? " · сохранён " + s.updated_at : "");
       $("status").className = "status ok";
       $("login").hidden = true;
+      $("manualToken").hidden = true;
       $("connectedActions").hidden = false;
     } else if (s.token_saved) {
       $("status").textContent = "Токен сохранён, но VK его не принимает. Подключите аккаунт заново или удалите токен.";
       $("login").hidden = false;
+      $("manualToken").hidden = false;
       $("connectedActions").hidden = false;
     } else {
       $("status").textContent = "VK не подключён";
       $("login").hidden = false;
+      $("manualToken").hidden = false;
       $("connectedActions").hidden = true;
     }
   } catch(e) {$("status").textContent = "Ошибка проверки: " + e.message;}
@@ -99,6 +108,19 @@ $("login").addEventListener("submit", async e => {
     else { $("challenge").style.display="none"; await refreshStatus(); $("message").textContent="VK успешно подключён."; $("message").className="msg ok"; }
   } catch(err) {$("password").value=""; $("message").textContent=err.message;}
   finally {$("loginButton").disabled=false;}
+});
+$("tokenButton").addEventListener("click", async () => {
+  const token = $("tokenValue").value.trim();
+  if (!token) { $("message").textContent = "Вставьте access token VK."; return; }
+  $("tokenButton").disabled = true;
+  try {
+    const data = await call("auth/token", {method:"POST",body:JSON.stringify({access_token:token})});
+    $("tokenValue").value = "";
+    await refreshStatus();
+    $("message").textContent = "Токен проверен и сохранён.";
+    $("message").className = "msg ok";
+  } catch(err) { $("message").textContent = err.message; }
+  finally { $("tokenButton").disabled = false; }
 });
 $("answerButton").addEventListener("click", async () => {
   if (!challengeId) return;
