@@ -59,8 +59,8 @@ Direct host-port publishing is intentionally disabled. This server accepts Home 
 
 ## Current limits
 
-- The client-side stream proxy API is implemented, but a complete library/player UI is still planned.
-- A Home Assistant media_player integration and a mobile app are separate roadmap tasks.
+- The web panel includes personal-library browsing, track search, pagination and browser playback through the server-side stream proxy.
+- A native Home Assistant media_player integration and a mobile app are separate roadmap tasks.
 - Server-side playback to physical audio outputs is not yet implemented. FFmpeg alone is not an audio output device.
 - VK audio availability depends on the account and VK's API access rules. CAPTCHA appearance is controlled by VK.
 
@@ -83,7 +83,7 @@ The add-on maps /data persistently. Database migrations preserve existing record
 
 ## Playback modes
 
-1. **Client-side stream:** implemented proxy supplies audio bytes to clients without exposing the temporary VK CDN URL.
+1. **Client-side stream:** implemented web player and stream proxy supply audio bytes to browsers without exposing the temporary VK CDN URL.
 2. **Server-side playback:** planned output/FFmpeg layer. A dedicated sink/transport implementation and device testing are still required.
 
 ## License

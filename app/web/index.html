@@ -20,6 +20,20 @@ button:disabled{opacity:.5;cursor:wait}
 #vkCaptcha{margin:14px 0;min-height:48px}
 .msg{white-space:pre-wrap;margin-top:12px;color:#fca5a5}.ok{color:#86efac}
 small{display:block;color:#9ca3af;margin-top:10px}
+.toolbar,.searchRow,.playerButtons{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.toolbar button,.searchRow button,.playerButtons button{margin:8px 0}
+.searchRow input{flex:1;min-width:180px}
+#trackList{margin-top:14px}
+.trackRow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid #374151}
+.trackMeta{min-width:0;flex:1}.trackTitle{font-weight:650;overflow-wrap:anywhere}
+.trackArtist{color:#9ca3af;font-size:13px;margin-top:3px}
+.trackDuration{color:#9ca3af;font-variant-numeric:tabular-nums;white-space:nowrap}
+.trackRow button{margin:0;padding:9px 12px}
+#player{margin-top:18px;padding:14px;background:#111827;border:1px solid #374151;border-radius:12px}
+#nowPlaying{font-weight:650;margin-bottom:10px}
+#audio{width:100%;margin-top:10px}
+#loadMore{display:none;width:100%}
+@media(max-width:480px){body{padding:14px 10px}.panel{padding:16px}.trackRow{gap:8px}.trackRow button{padding:8px}}
 </style>
 </head>
 <body><main class="wrap"><section class="panel">
@@ -38,6 +52,28 @@ small{display:block;color:#9ca3af;margin-top:10px}
 <label for="tokenValue">VK access token</label>
 <input id="tokenValue" type="password" autocomplete="off" spellcheck="false">
 <button id="tokenButton" class="secondary" type="button">Проверить и сохранить токен</button>
+</section>
+<section id="music" hidden>
+<h2>Музыка</h2>
+<div class="toolbar">
+  <button id="libraryButton" type="button" class="secondary">Моя музыка</button>
+  <button id="clearSearchButton" type="button" class="secondary">Сбросить поиск</button>
+</div>
+<form id="searchForm" class="searchRow">
+  <input id="searchQuery" type="search" maxlength="200" placeholder="Поиск музыки в VK" aria-label="Поиск музыки">
+  <button type="submit">Найти</button>
+</form>
+<p id="libraryMessage" class="muted" role="status">Загрузка…</p>
+<div id="trackList" aria-live="polite"></div>
+<button id="loadMore" class="secondary" type="button">Загрузить ещё</button>
+<div id="player">
+  <div id="nowPlaying">Ничего не воспроизводится</div>
+  <div class="playerButtons">
+    <button id="previousTrack" type="button" class="secondary" aria-label="Предыдущий трек">Назад</button>
+    <button id="nextTrack" type="button" class="secondary" aria-label="Следующий трек">Далее</button>
+  </div>
+  <audio id="audio" controls preload="none"></audio>
+</div>
 </section>
 <section id="challenge">
 <h2 id="challengeTitle">Подтверждение VK</h2>
@@ -66,6 +102,14 @@ const $ = id => document.getElementById(id);
 let challengeId = null;
 let challengeType = null;
 let captchaWidget = null;
+const PAGE_SIZE = 50;
+let currentItems = [];
+let currentOffset = 0;
+let currentMode = "library";
+let currentQuery = "";
+let hasMoreTracks = false;
+let loadSequence = 0;
+let currentTrackIndex = -1;
 
 async function call(path, options={}) {
   const response = await fetch(api(path), {headers:{"Content-Type":"application/json"}, ...options});
@@ -93,23 +137,119 @@ async function refreshStatus() {
   try {
     const s = await call("auth/status");
     if (s.authenticated) {
+      const firstConnect = $("music").hidden;
       $("status").textContent = "VK подключён" + (s.user_id ? " · ID " + s.user_id : "") + (s.updated_at ? " · сохранён " + s.updated_at : "");
       $("status").className = "status ok";
       $("login").hidden = true;
       $("manualToken").hidden = true;
       $("connectedActions").hidden = false;
+      $("music").hidden = false;
+      if (firstConnect) await loadTracks("library", false);
     } else if (s.token_saved) {
       $("status").textContent = "Токен сохранён, но VK его не принимает. Подключите аккаунт заново или удалите токен.";
       $("login").hidden = false;
       $("manualToken").hidden = false;
       $("connectedActions").hidden = false;
+      $("music").hidden = true;
     } else {
       $("status").textContent = "VK не подключён";
       $("login").hidden = false;
       $("manualToken").hidden = false;
       $("connectedActions").hidden = true;
+      $("music").hidden = true;
     }
   } catch(e) {$("status").textContent = "Ошибка проверки: " + e.message;}
+}
+function formatDuration(seconds) {
+  const value = Math.max(0, Number(seconds) || 0);
+  return Math.floor(value / 60) + ":" + String(Math.floor(value % 60)).padStart(2, "0");
+}
+function renderTracks() {
+  const list = $("trackList");
+  list.replaceChildren();
+  currentItems.forEach((track, index) => {
+    const row = document.createElement("div");
+    row.className = "trackRow";
+    const meta = document.createElement("div");
+    meta.className = "trackMeta";
+    const title = document.createElement("div");
+    title.className = "trackTitle";
+    title.textContent = track.title || "Без названия";
+    const artist = document.createElement("div");
+    artist.className = "trackArtist";
+    artist.textContent = track.artist || "Неизвестный исполнитель";
+    meta.append(title, artist);
+    const duration = document.createElement("span");
+    duration.className = "trackDuration";
+    duration.textContent = formatDuration(track.duration);
+    const play = document.createElement("button");
+    play.type = "button";
+    play.textContent = "Слушать";
+    play.addEventListener("click", () => playTrack(index));
+    row.append(meta, duration, play);
+    list.append(row);
+  });
+  $("loadMore").style.display = hasMoreTracks ? "block" : "none";
+  if (!currentItems.length) $("libraryMessage").textContent = "Треки не найдены.";
+}
+async function loadTracks(mode="library", append=false) {
+  const query = mode === "search" ? $("searchQuery").value.trim() : "";
+  if (mode === "search" && !query) mode = "library";
+  currentMode = mode;
+  currentQuery = query;
+  const offset = append ? currentOffset : 0;
+  const sequence = ++loadSequence;
+  $("libraryMessage").textContent = "Загрузка…";
+  if (!append) {
+    currentItems = [];
+    currentOffset = 0;
+    hasMoreTracks = false;
+    renderTracks();
+  }
+  const params = new URLSearchParams({limit:String(PAGE_SIZE),offset:String(offset)});
+  const endpoint = mode === "search"
+    ? "search?q=" + encodeURIComponent(query) + "&" + params.toString()
+    : "library/tracks?" + params.toString();
+  try {
+    const data = await call(endpoint);
+    if (sequence !== loadSequence) return;
+    const items = Array.isArray(data.items) ? data.items : [];
+    currentItems = append ? currentItems.concat(items) : items;
+    currentOffset = offset + items.length;
+    hasMoreTracks = Boolean(data.has_more ?? (items.length === PAGE_SIZE));
+    $("libraryMessage").textContent = currentItems.length
+      ? (mode === "search" ? "Результаты поиска: " : "В моей музыке: ") + currentItems.length
+      : "Треки не найдены.";
+    renderTracks();
+  } catch (err) {
+    if (sequence !== loadSequence) return;
+    $("libraryMessage").textContent = err.message;
+  }
+}
+async function playTrack(index) {
+  const track = currentItems[index];
+  if (!track || !track.id) return;
+  currentTrackIndex = index;
+  $("nowPlaying").textContent = (track.artist ? track.artist + " — " : "") + (track.title || "Без названия");
+  const audio = $("audio");
+  audio.src = api("tracks/" + encodeURIComponent(track.id) + "/stream");
+  try {
+    await audio.play();
+  } catch (err) {
+    $("libraryMessage").textContent = "Не удалось начать воспроизведение: " + (err.message || String(err));
+  }
+}
+async function playNext() {
+  const nextIndex = currentTrackIndex + 1;
+  if (nextIndex < currentItems.length) return playTrack(nextIndex);
+  if (hasMoreTracks) {
+    const previousLength = currentItems.length;
+    await loadTracks(currentMode, true);
+    if (currentItems.length > previousLength) return playTrack(previousLength);
+  }
+}
+function playPrevious() {
+  if (currentTrackIndex > 0) playTrack(currentTrackIndex - 1);
 }
 async function showChallenge(data) {
   await destroyCaptchaWidget();
@@ -267,6 +407,22 @@ $("cancelButton").addEventListener("click",async()=>{
   challengeType=null;
   $("challenge").style.display="none";
   $("message").textContent="Вход отменён.";
+});
+$("libraryButton").addEventListener("click", () => loadTracks("library", false));
+$("clearSearchButton").addEventListener("click", () => {
+  $("searchQuery").value = "";
+  loadTracks("library", false);
+});
+$("searchForm").addEventListener("submit", event => {
+  event.preventDefault();
+  loadTracks("search", false);
+});
+$("loadMore").addEventListener("click", () => loadTracks(currentMode, true));
+$("nextTrack").addEventListener("click", playNext);
+$("previousTrack").addEventListener("click", playPrevious);
+$("audio").addEventListener("ended", playNext);
+$("audio").addEventListener("error", () => {
+  if ($("audio").src) $("libraryMessage").textContent = "VK не смог предоставить поток этого трека. Попробуйте другой трек или повторите позже.";
 });
 $("deleteButton").addEventListener("click",async()=>{
   if(!confirm("Удалить сохранённый токен VK из данных add-on?"))return;

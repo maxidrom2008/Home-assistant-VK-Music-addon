@@ -181,7 +181,10 @@ async def search(
         items = await search_tracks(make_service(credentials), q, limit, offset)
     except VkApiException as exc:
         raise HTTPException(status_code=502, detail=f"VK API error {getattr(exc, 'error_code', 'unknown')}") from exc
-    return {"query": q, "items": items, "limit": limit, "offset": offset, "available": True}
+    return {
+        "query": q, "items": items, "limit": limit, "offset": offset,
+        "available": True, "has_more": len(items) == limit,
+    }
 
 
 @router.get("/playback/state")

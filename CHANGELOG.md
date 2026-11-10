@@ -8,6 +8,7 @@
 - Expire abandoned in-memory login sessions after 10 minutes and wipe temporary credentials on cancel, replacement, failure and success.
 - Add automated tests for the modern CAPTCHA request, challenge lifecycle and device-approval 2FA.
 - Support push/device approval for VK 2FA methods that do not deliver a one-time code.
+- Add a working browser music player with library browsing, search, pagination and next/previous track controls.
 
 ## 0.1.1
 - Integrate vkpymusic 4.0.2 for VK authorization and media requests.
