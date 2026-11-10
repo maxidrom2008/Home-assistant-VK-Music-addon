@@ -3,6 +3,7 @@ version: "0.1.2"
 slug: vk_music_server
 description: Standalone VK Music server with persistent VK login, library and streaming
 url: https://github.com/maxidrom2008/Home-assistant-VK-Music-addon
+image: ghcr.io/maxidrom2008/vk-music-server
 arch:
   - amd64
   - aarch64

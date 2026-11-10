@@ -33,9 +33,21 @@ The repository includes a companion custom integration at `custom_components/vk_
 
 After connecting the VK account in the add-on panel, copy the **internal URL** shown under **Интеграция Home Assistant**. Add the VK Music Server integration from **Settings → Devices & services → Add integration** and paste that URL (for example, `http://<supervisor-hostname>:8099`). The integration creates a `media_player.vk_music_server` entity with playback, pause, stop and media browsing for the user's library and playlists.
 
-HACS package structure and metadata are included, but automated HACS validation deliberately skips the license and repository-topic checks until the repository owner chooses a source license and adds GitHub topics. The project is not yet submitted to the default HACS catalog.
+HACS package structure and metadata are included, but automated HACS validation deliberately skips the license and repository-topic checks until the repository owner chooses a source license and adds GitHub topics. The project is not yet submitted to the default HACS catalog. HACS validation skips license and topics checks until the repository owner chooses a source license and adds repository topics.
 
 The internal URL is not published on a host port. The add-on allows API access from Home Assistant Core's host-network gateway and the Supervisor/Ingress proxy only; other add-on containers and LAN clients are rejected. The add-on reads its own hostname from `GET /addons/self/info` using the limited Supervisor token.
+
+## Install the add-on
+
+Add this repository to the Home Assistant Apps store:
+
+`https://github.com/maxidrom2008/Home-assistant-VK-Music-addon`
+
+The repository builds and publishes a multi-architecture GHCR image for `amd64` and `aarch64` after the test job succeeds. The add-on manifest points to `ghcr.io/maxidrom2008/vk-music-server` and the image tag is kept in sync with the manifest version.
+
+**First publication:** GitHub may create a new Container Registry package with private visibility. Open the repository's **Packages → vk-music-server → Package settings** and make the package **Public** so Home Assistant can pull the image without registry credentials. The repository itself can retain its existing visibility.
+
+After adding the repository, install **VK Music Server** from the Apps store and open its panel.
 
 ## Setup and disconnect
 
