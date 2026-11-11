@@ -1,6 +1,14 @@
 from pathlib import Path
+import os
+import stat
 
-from app.storage.database import delete_credentials, get_credentials, initialize, save_credentials
+from app.storage.database import (
+    connect,
+    delete_credentials,
+    get_credentials,
+    initialize,
+    save_credentials,
+)
 
 
 def test_credentials_survive_reopen_and_can_be_deleted(tmp_path: Path) -> None:
@@ -17,3 +25,30 @@ def test_credentials_survive_reopen_and_can_be_deleted(tmp_path: Path) -> None:
     assert delete_credentials(database) is True
     assert get_credentials(database) is None
     assert delete_credentials(database) is False
+
+
+def test_database_and_wal_sidecars_are_private_even_with_permissive_umask(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "data" / "vk_music.sqlite3"
+    initialize(database)
+    save_credentials(database, "private-token", "test-agent", "123")
+
+    previous_umask = os.umask(0o022)
+    try:
+        with connect(database) as db:
+            db.execute(
+                "UPDATE vk_credentials SET access_token = ? WHERE id = 1",
+                ("updated-private-token",),
+            )
+            wal = Path(f"{database}-wal")
+            assert wal.exists()
+            assert stat.S_IMODE(database.stat().st_mode) == 0o600
+            assert stat.S_IMODE(wal.stat().st_mode) == 0o600
+            shm = Path(f"{database}-shm")
+            if shm.exists():
+                assert stat.S_IMODE(shm.stat().st_mode) == 0o600
+    finally:
+        os.umask(previous_umask)
+
+    assert os.umask(previous_umask) == previous_umask

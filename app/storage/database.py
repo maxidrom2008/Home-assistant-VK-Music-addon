@@ -15,28 +15,40 @@ SCHEMA_VERSION = 2
 
 @contextmanager
 def connect(path: Path) -> Iterator[sqlite3.Connection]:
+    """Open SQLite with private permissions for the DB and WAL sidecars."""
     path.parent.mkdir(parents=True, exist_ok=True)
     old_umask = os.umask(0o077)
+    db: sqlite3.Connection | None = None
     try:
+        # Keep the restrictive umask for the entire connection lifetime:
+        # SQLite creates -wal/-shm lazily, after connect() has returned.
         db = sqlite3.connect(path)
+        db.row_factory = sqlite3.Row
+        db.execute("PRAGMA foreign_keys = ON")
+        db.execute("PRAGMA journal_mode = WAL")
+        try:
+            yield db
+        except Exception:
+            db.rollback()
+            raise
+        else:
+            db.commit()
     finally:
+        if db is not None:
+            db.close()
+        # Also tighten permissions on pre-existing files and sidecars.
+        for candidate in (
+            path,
+            Path(f"{path}-wal"),
+            Path(f"{path}-shm"),
+        ):
+            try:
+                if candidate.exists():
+                    candidate.chmod(0o600)
+            except OSError:
+                # A read-only or unusual filesystem must not prevent startup.
+                pass
         os.umask(old_umask)
-    db.row_factory = sqlite3.Row
-    db.execute("PRAGMA foreign_keys = ON")
-    db.execute("PRAGMA journal_mode = WAL")
-    try:
-        path.chmod(0o600)
-    except OSError:
-        pass
-    try:
-        yield db
-    except Exception:
-        db.rollback()
-        raise
-    else:
-        db.commit()
-    finally:
-        db.close()
 
 
 def initialize(path: Path) -> None:
