@@ -40,6 +40,7 @@ Run this on a Home Assistant OS installation. Keep the existing Music Assistant 
 - [ ] Add the VK Music Server integration using the internal URL displayed in the app panel.
 - [ ] Confirm `media_player.vk_music_server` is created and available.
 - [ ] Browse personal tracks and playlists from Home Assistant.
+- [ ] Search VK tracks from Home Assistant's media browser and play a result.
 - [ ] Start a track, pause, resume and stop it from Home Assistant.
 
 ## Physical HAOS audio

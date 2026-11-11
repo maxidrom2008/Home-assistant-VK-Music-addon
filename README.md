@@ -35,7 +35,7 @@ The repository includes a companion custom integration at `custom_components/vk_
 
 **Manual installation (available now):** copy the folder `custom_components/vk_music_server` into `/config/custom_components/vk_music_server` on Home Assistant, then restart Home Assistant.
 
-After connecting the VK account in the add-on panel, copy the **internal URL** shown under **Интеграция Home Assistant**. Add the VK Music Server integration from **Settings → Devices & services → Add integration** and paste that URL (for example, `http://<supervisor-hostname>:8099`). The integration creates a `media_player.vk_music_server` entity with playback, pause, stop and media browsing for the user's library and playlists.
+After connecting the VK account in the add-on panel, copy the **internal URL** shown under **Интеграция Home Assistant**. Add the VK Music Server integration from **Settings → Devices & services → Add integration** and paste that URL (for example, `http://<supervisor-hostname>:8099`). The integration creates a `media_player.vk_music_server` entity with playback, pause, stop, media browsing for the user's library and playlists, and native Home Assistant media search.
 
 HACS package structure and metadata are included, but the project is not submitted to the default HACS catalog. Automated HACS validation skips the license and repository-topic checks until the repository owner chooses a source license and adds GitHub topics.
 

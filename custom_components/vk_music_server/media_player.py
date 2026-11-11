@@ -8,6 +8,8 @@ from typing import Any
 from homeassistant.components.media_player import (
     BrowseMedia,
     MediaPlayerEntity,
+    SearchMedia,
+    SearchMediaQuery,
 )
 from homeassistant.components.media_player.const import (
     MediaClass,
@@ -46,6 +48,7 @@ class VKMusicServerMediaPlayer(MediaPlayerEntity):
         | MediaPlayerEntityFeature.STOP
         | MediaPlayerEntityFeature.PLAY_MEDIA
         | MediaPlayerEntityFeature.BROWSE_MEDIA
+        | MediaPlayerEntityFeature.SEARCH_MEDIA
     )
 
     def __init__(
@@ -243,6 +246,38 @@ class VKMusicServerMediaPlayer(MediaPlayerEntity):
             raise BrowseError(str(exc)) from exc
 
         raise BrowseError("Неизвестный раздел VK Music")
+
+
+    async def async_search_media(self, query: SearchMediaQuery) -> SearchMedia:
+        """Search VK audio and return playable media-browser results."""
+        search_query = query.search_query.strip()
+        if not search_query or query.media_content_type not in (None, MediaType.MUSIC, "music"):
+            return SearchMedia(result=[])
+
+        from urllib.parse import urlencode
+
+        params = urlencode({"q": search_query, "limit": 100, "offset": 0})
+        try:
+            data = await self.api.get(f"search?{params}")
+        except VKMusicServerApiError as exc:
+            raise BrowseError(str(exc)) from exc
+
+        results = [
+            BrowseMedia(
+                title=(
+                    f"{item.get('artist') or 'Неизвестный исполнитель'} — "
+                    f"{item.get('title') or 'Без названия'}"
+                ),
+                media_class=MediaClass.TRACK,
+                media_content_id=f"track:{item['id']}",
+                media_content_type=MediaType.MUSIC,
+                can_play=True,
+                can_expand=False,
+            )
+            for item in data.get("items", [])
+            if item.get("id")
+        ]
+        return SearchMedia(result=results)
 
     @staticmethod
     def _track_directory(
