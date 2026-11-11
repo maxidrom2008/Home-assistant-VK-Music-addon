@@ -19,12 +19,3 @@ def test_home_assistant_core_internal_network_is_allowed_but_other_addons_are_no
 
     with TestClient(app, client=("172.30.33.25", 50000)) as other_addon:
         assert other_addon.get("/api/v1/status").status_code == 403
-
-
-
-def test_home_assistant_core_internal_network_is_allowed_but_other_addons_are_not() -> None:
-    with TestClient(app, client=("172.30.32.1", 50000)) as core_client:
-        assert core_client.get("/api/v1/status").status_code == 200
-
-    with TestClient(app, client=("172.30.33.25", 50000)) as other_addon:
-        assert other_addon.get("/api/v1/status").status_code == 403
