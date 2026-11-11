@@ -7,6 +7,7 @@
 - Validate VK track IDs before making API requests.
 - Add API authentication, database migration, cancellation and WebSocket tests.
 - Implement live authentication and playback WebSocket events; keep the browser player synchronized with server playback state.
+- Add native Home Assistant media search and advertise the music content type in the media player entity.
 - Centralize the runtime API version and synchronize Home Assistant app, HACS integration and web package metadata.
 - Add a final HAOS acceptance checklist; real-account CAPTCHA and physical audio output remain hardware-validation gates.
 

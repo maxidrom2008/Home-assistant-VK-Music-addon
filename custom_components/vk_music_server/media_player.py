@@ -41,6 +41,7 @@ class VKMusicServerMediaPlayer(MediaPlayerEntity):
     """A controllable player that outputs audio through the add-on's PulseAudio sink."""
 
     _attr_name = "VK Music Server"
+    _attr_media_content_type = MediaType.MUSIC
     _attr_should_poll = True
     _attr_supported_features = (
         MediaPlayerEntityFeature.PLAY
@@ -159,6 +160,8 @@ class VKMusicServerMediaPlayer(MediaPlayerEntity):
         **kwargs: Any,
     ) -> None:
         """Start a VK track by the stable owner_id_track_id value."""
+        if media_type not in (MediaType.MUSIC, "music"):
+            raise ValueError("VK Music Server supports music tracks only")
         track_id = media_id.removeprefix("track:")
         if not re.fullmatch(r"-?\d+_-?\d+", track_id):
             raise ValueError("Unsupported VK track id")
