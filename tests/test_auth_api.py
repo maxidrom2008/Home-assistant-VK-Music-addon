@@ -90,9 +90,9 @@ def test_deleting_token_stops_server_playback(monkeypatch) -> None:
     with TestClient(app) as client:
         app.state.playback_manager.stop = fake_stop
         response = client.delete("/api/v1/auth/token")
+        assert stopped == [True]
 
     assert response.status_code == 200
     assert response.json()["deleted"] is True
-    # Token deletion stops playback; the app lifespan also stops it on shutdown.
-    assert stopped
-    assert stopped[0] is True
+    # The app lifespan performs its own cleanup after the request test.
+    assert stopped == [True, True]
