@@ -21,6 +21,12 @@ from app.vk.client import (
 router = APIRouter(prefix="/api/v1")
 
 
+async def _publish_event(request: Request, event: str, data: dict[str, object]) -> None:
+    hub = getattr(request.app.state, "event_hub", None)
+    if hub is not None:
+        await hub.publish(event, data)
+
+
 class AuthStart(BaseModel):
     login: str = Field(min_length=1, max_length=254)
     password: str = Field(min_length=1, max_length=512)
@@ -95,7 +101,12 @@ async def auth_status(request: Request) -> dict[str, object]:
 @router.post("/auth/start")
 async def auth_start(payload: AuthStart, request: Request) -> dict[str, object]:
     try:
-        return await request.app.state.auth_manager.start(payload.login, payload.password)
+        result = await request.app.state.auth_manager.start(payload.login, payload.password)
+        await _publish_event(request, "auth.state", {
+            "state": result.get("state"),
+            "authenticated": result.get("authenticated", False),
+        })
+        return result
     except (ValueError, VKAuthError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -103,9 +114,15 @@ async def auth_start(payload: AuthStart, request: Request) -> dict[str, object]:
 @router.post("/auth/challenge")
 async def auth_challenge(payload: AuthChallenge, request: Request) -> dict[str, object]:
     try:
-        return await request.app.state.auth_manager.submit(
+        result = await request.app.state.auth_manager.submit(
             payload.challenge_id, payload.answer, approved=payload.approved
         )
+        await _publish_event(request, "auth.state", {
+            "state": result.get("state"),
+            "authenticated": result.get("authenticated", False),
+            "user_id": result.get("user_id"),
+        })
+        return result
     except (ValueError, VKAuthError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -145,7 +162,9 @@ async def auth_token_import(payload: TokenImport, request: Request) -> dict[str,
         user_id or None,
     )
     request.app.state.auth_manager.cancel_all()
-    return {"state": "authenticated", "authenticated": True, "user_id": user_id or None}
+    result = {"state": "authenticated", "authenticated": True, "user_id": user_id or None}
+    await _publish_event(request, "auth.state", result)
+    return result
 
 
 @router.delete("/auth/challenge/{challenge_id}")
@@ -158,7 +177,10 @@ async def auth_delete(request: Request) -> dict[str, object]:
     request.app.state.auth_manager.cancel_all()
     await request.app.state.playback_manager.stop()
     deleted = delete_credentials(request.app.state.database_path)
-    return {"deleted": deleted, "authenticated": False, "state": "not_configured"}
+    result = {"deleted": deleted, "authenticated": False, "state": "not_configured"}
+    await _publish_event(request, "auth.state", result)
+    await _publish_event(request, "playback.state", {"state": "idle", "track": None})
+    return result
 
 
 @router.get("/library/tracks")
@@ -261,11 +283,13 @@ async def playback_server_play(
         raise HTTPException(status_code=401, detail="Сначала подключите VK")
     try:
         resolved = await resolve_track(make_service(credentials), payload.track_id)
-        return await request.app.state.playback_manager.play(
+        state = await request.app.state.playback_manager.play(
             resolved["stream_url"],
             credentials["user_agent"],
             resolved["track"],
         )
+        await _publish_event(request, "playback.state", state)
+        return state
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except LookupError as exc:
@@ -279,7 +303,9 @@ async def playback_server_play(
 @router.post("/playback/server/pause")
 async def playback_server_pause(request: Request) -> dict[str, object]:
     try:
-        return await request.app.state.playback_manager.pause()
+        state = await request.app.state.playback_manager.pause()
+        await _publish_event(request, "playback.state", state)
+        return state
     except PlaybackError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
@@ -287,14 +313,18 @@ async def playback_server_pause(request: Request) -> dict[str, object]:
 @router.post("/playback/server/resume")
 async def playback_server_resume(request: Request) -> dict[str, object]:
     try:
-        return await request.app.state.playback_manager.resume()
+        state = await request.app.state.playback_manager.resume()
+        await _publish_event(request, "playback.state", state)
+        return state
     except PlaybackError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post("/playback/server/stop")
 async def playback_server_stop(request: Request) -> dict[str, object]:
-    return await request.app.state.playback_manager.stop()
+    state = await request.app.state.playback_manager.stop()
+    await _publish_event(request, "playback.state", state)
+    return state
 
 
 @router.get("/tracks/{track_id}/stream")

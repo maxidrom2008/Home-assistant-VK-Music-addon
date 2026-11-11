@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 
 from app.api.routes import router as api_router
-from app.api.websocket import router as websocket_router
+from app.api.websocket import EventHub, router as websocket_router
 from app.config import settings
 from app.playback.manager import ServerPlaybackManager
 from app.security import IngressOnlyMiddleware
@@ -49,6 +49,7 @@ async def lifespan(app: FastAPI):
     app.state.database_path = settings.database_path
     app.state.supervisor_info = await supervisor_app_info()
     app.state.auth_manager = VKAuthManager(settings.database_path)
+    app.state.event_hub = EventHub()
     app.state.playback_manager = ServerPlaybackManager()
     try:
         yield
