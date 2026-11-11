@@ -52,3 +52,26 @@ def test_database_and_wal_sidecars_are_private_even_with_permissive_umask(
         os.umask(previous_umask)
 
     assert os.umask(previous_umask) == previous_umask
+
+
+def test_schema_v1_is_migrated_without_losing_credentials(tmp_path: Path) -> None:
+    import sqlite3
+
+    database = tmp_path / "legacy.sqlite3"
+    with sqlite3.connect(database) as db:
+        db.execute(
+            "CREATE TABLE vk_credentials ("
+            "id INTEGER PRIMARY KEY, access_token TEXT NOT NULL, "
+            "user_agent TEXT NOT NULL, updated_at TEXT NOT NULL)"
+        )
+        db.execute(
+            "INSERT INTO vk_credentials(id, access_token, user_agent, updated_at) "
+            "VALUES(1, 'legacy-token', 'legacy-agent', '2025-01-01')"
+        )
+
+    initialize(database)
+    credentials = get_credentials(database)
+    assert credentials is not None
+    assert credentials["access_token"] == "legacy-token"
+    assert credentials["user_agent"] == "legacy-agent"
+    assert credentials["user_id"] is None
