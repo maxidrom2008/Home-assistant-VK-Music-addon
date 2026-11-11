@@ -24,7 +24,7 @@ class EventHub:
         for websocket in tuple(self._clients):
             try:
                 await websocket.send_json(message)
-            except (RuntimeError, WebSocketDisconnect):
+            except (OSError, RuntimeError, WebSocketDisconnect):
                 stale.append(websocket)
         for websocket in stale:
             self.disconnect(websocket)
@@ -33,11 +33,13 @@ class EventHub:
 @router.websocket("/api/v1/events")
 async def events(websocket: WebSocket) -> None:
     hub: EventHub = websocket.app.state.event_hub
-    await hub.connect(websocket)
     try:
+        await hub.connect(websocket)
         while True:
             message = await websocket.receive_text()
             if message == "ping":
                 await websocket.send_json({"type": "server.pong"})
     except WebSocketDisconnect:
+        pass
+    finally:
         hub.disconnect(websocket)
