@@ -102,3 +102,30 @@ def test_browser_script_has_no_runtime_external_captcha_cdn_dependency() -> None
     script = Path("app/web/app.js").read_text(encoding="utf-8")
     assert 'from "@vkid/captcha"' in script
     assert "esm.sh" not in script
+
+
+
+def test_auth_status_distinguishes_vk_network_failure_from_invalid_token(monkeypatch) -> None:
+    import app.api.routes as routes
+
+    class UnreachableVK:
+        async def is_token_valid_async(self):
+            raise RuntimeError("temporary network failure")
+
+    monkeypatch.setattr(routes, "get_credentials", lambda path: {
+        "access_token": "saved-token",
+        "user_agent": "test-agent",
+        "user_id": "123",
+        "updated_at": "2026-11-11T00:00:00Z",
+    })
+    monkeypatch.setattr(routes, "make_service", lambda credentials: UnreachableVK())
+
+    with TestClient(app) as client:
+        response = client.get("/api/v1/auth/status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["authenticated"] is False
+    assert payload["token_saved"] is True
+    assert payload["state"] == "validation_unavailable"
+    assert payload["user_id"] == "123"

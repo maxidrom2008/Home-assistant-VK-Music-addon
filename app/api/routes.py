@@ -70,8 +70,18 @@ async def auth_status(request: Request) -> dict[str, object]:
         return {"authenticated": False, "state": "not_configured", "user_id": None}
     try:
         valid = bool(await make_service(credentials).is_token_valid_async())
-    except Exception:
-        valid = False
+    except Exception as exc:
+        # vkpymusic maps VK API rejections to False, but transport errors escape.
+        # Do not tell users their token is invalid during a VK/network outage.
+        return {
+            "authenticated": False,
+            "token_saved": True,
+            "state": "validation_unavailable",
+            "user_id": credentials.get("user_id"),
+            "updated_at": credentials.get("updated_at"),
+            "delete_available": True,
+            "error": f"Не удалось связаться с VK для проверки токена ({type(exc).__name__})",
+        }
     return {
         "authenticated": valid,
         "token_saved": True,

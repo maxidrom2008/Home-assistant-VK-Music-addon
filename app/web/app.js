@@ -40,7 +40,25 @@ async function finishLogin() {
 async function refreshStatus() {
   try {
     const s = await call("auth/status");
-    if (s.authenticated) {
+    if (s.state === "validation_unavailable") {
+      const firstConnect = $("music").hidden;
+      $("status").textContent = "Токен VK сохранён" + (s.user_id ? " · ID " + s.user_id : "") + " · проверка VK временно недоступна";
+      $("status").className = "status";
+      $("login").hidden = true;
+      $("manualToken").hidden = true;
+      $("connectedActions").hidden = false;
+      $("music").hidden = false;
+      $("haIntegration").hidden = true;
+      $("audio").pause();
+      try {
+        const integration = await call("integration/info");
+        $("haIntegration").hidden = !integration.available;
+        $("internalBaseUrl").textContent = integration.base_url || "";
+      } catch (e) {
+        $("haIntegration").hidden = true;
+      }
+      if (firstConnect) await loadTracks("library", false);
+    } else if (s.authenticated) {
       const firstConnect = $("music").hidden;
       $("status").textContent = "VK подключён" + (s.user_id ? " · ID " + s.user_id : "") + (s.updated_at ? " · сохранён " + s.updated_at : "");
       $("status").className = "status ok";
