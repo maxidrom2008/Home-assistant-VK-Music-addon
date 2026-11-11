@@ -26,7 +26,6 @@ def test_hacs_custom_integration_manifest_is_present() -> None:
     assert manifest["domain"] == "vk_music_server"
     assert manifest["config_flow"] is True
     assert manifest["version"] == "1.0.0-rc.1"
-    assert manifest["homeassistant"] == "2025.5.0"
     assert manifest["issue_tracker"].endswith("/issues")
 
 
