@@ -8,6 +8,7 @@ from app.playback.manager import PlaybackError
 from app.playback.stream import proxy_audio
 from app.storage.database import delete_credentials, get_credentials
 from app.vk.auth import VKAuthError
+from app.version import VERSION
 from app.vk.client import (
     list_my_tracks,
     list_playlists,
@@ -66,7 +67,7 @@ async def integration_info(request: Request) -> dict[str, object]:
 
 @router.get("/status")
 async def api_status() -> dict[str, str]:
-    return {"status": "ok", "product": "VK Music Server", "version": "0.1.2"}
+    return {"status": "ok", "product": "VK Music Server", "version": VERSION}
 
 
 @router.get("/auth/status")

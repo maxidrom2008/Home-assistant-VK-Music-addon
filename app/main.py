@@ -12,6 +12,7 @@ from app.api.websocket import EventHub, router as websocket_router
 from app.config import settings
 from app.playback.manager import ServerPlaybackManager
 from app.security import IngressOnlyMiddleware
+from app.version import VERSION
 from app.storage.database import initialize
 from app.vk.auth import VKAuthManager
 
@@ -64,7 +65,7 @@ async def lifespan(app: FastAPI):
         await app.state.playback_manager.stop()
 
 
-app = FastAPI(title="VK Music Server", version="0.1.2", lifespan=lifespan)
+app = FastAPI(title="VK Music Server", version=VERSION, lifespan=lifespan)
 app.add_middleware(IngressOnlyMiddleware)
 app.include_router(api_router)
 app.include_router(websocket_router)

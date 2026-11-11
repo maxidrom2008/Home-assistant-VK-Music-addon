@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.0-rc.1
+- Prepare the first 1.x release candidate.
+- Harden SQLite database, WAL and SHM file permissions for persisted VK credentials.
+- Prevent a cancelled or expired in-flight VK login from saving a late access token.
+- Validate VK track IDs before making API requests.
+- Add API authentication, database migration, cancellation and WebSocket tests.
+- Implement live authentication and playback WebSocket events; keep the browser player synchronized with server playback state.
+- Centralize the runtime API version and synchronize Home Assistant app, HACS integration and web package metadata.
+- Add a final HAOS acceptance checklist; real-account CAPTCHA and physical audio output remain hardware-validation gates.
+
 ## 0.1.2
 - Add first-class VK ID browser CAPTCHA integration using the pinned @vkid/captcha 2.0.0 widget.
 - Pass the browser-generated success_token back into the pending VK authorization request; retain legacy image CAPTCHA support.

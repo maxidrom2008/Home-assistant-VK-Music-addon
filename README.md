@@ -2,6 +2,10 @@
 
 Standalone VK Music server for Home Assistant OS. It is independent from Music Assistant and does not modify or replace the existing Music Assistant VK Edition add-on.
 
+## 1.0.0-rc.1 — Release candidate
+
+This release candidate includes the initial standalone feature set, security hardening, and live playback events. It is intended for final Home Assistant OS validation before the stable 1.0.0 release. Real VK-account authorization and physical audio output must still be confirmed on the target installation.
+
 ## v0.1.2 — VK ID CAPTCHA integration
 
 The authorization flow supports both CAPTCHA formats currently returned by VK:
@@ -83,7 +87,7 @@ All application endpoints are available through Home Assistant Ingress:
 - POST /api/v1/playback/server/pause
 - POST /api/v1/playback/server/resume
 - POST /api/v1/playback/server/stop
-- WebSocket: /api/v1/events
+- WebSocket: /api/v1/events — sends server.ready, auth.state and playback.state; send the text message ping to receive server.pong
 
 Direct host-port publishing is intentionally disabled. API access is limited to the Home Assistant Core host-network gateway, the Supervisor/Ingress proxy, and loopback. Other add-on containers and LAN clients are rejected.
 

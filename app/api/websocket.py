@@ -1,6 +1,8 @@
 """WebSocket event channel for live player and authentication updates."""
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from app.version import VERSION
+
 router = APIRouter()
 
 
@@ -13,7 +15,7 @@ class EventHub:
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
         self._clients.add(websocket)
-        await websocket.send_json({"type": "server.ready", "version": "0.1.2"})
+        await websocket.send_json({"type": "server.ready", "version": VERSION})
 
     def disconnect(self, websocket: WebSocket) -> None:
         self._clients.discard(websocket)

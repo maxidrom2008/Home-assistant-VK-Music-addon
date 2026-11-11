@@ -7,7 +7,7 @@ import yaml
 def test_addon_manifest_uses_persistent_data_and_ingress_only() -> None:
     manifest = yaml.safe_load(Path("config.yaml").read_text(encoding="utf-8"))
     assert manifest["slug"] == "vk_music_server"
-    assert manifest["version"] == "0.1.2"
+    assert manifest["version"] == "1.0.0-rc.1"
     assert manifest["image"] == "ghcr.io/maxidrom2008/vk-music-server"
     assert manifest["ingress"] is True
     assert manifest["ingress_port"] == 8099
@@ -25,5 +25,5 @@ def test_hacs_custom_integration_manifest_is_present() -> None:
     )
     assert manifest["domain"] == "vk_music_server"
     assert manifest["config_flow"] is True
-    assert manifest["version"] == "0.1.2"
+    assert manifest["version"] == "1.0.0-rc.1"
     assert manifest["issue_tracker"].endswith("/issues")
