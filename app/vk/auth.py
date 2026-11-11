@@ -337,6 +337,10 @@ class VKAuthManager:
         session["captcha_success_token"] = None
         return await self._attempt(challenge_id)
 
+    def _ensure_active(self, challenge_id: str, session: dict[str, Any]) -> None:
+        if self.pending.get(challenge_id) is not session:
+            raise VKAuthError("Сеанс авторизации отменён или истёк. Начните вход заново.")
+
     async def _attempt(self, challenge_id: str) -> dict[str, Any]:
         session = self.pending[challenge_id]
         try:
@@ -349,6 +353,10 @@ class VKAuthManager:
                 captcha_success_token=session.get("captcha_success_token"),
             )
         except VKAuthChallenge as exc:
+            if self.pending.get(challenge_id) is not session:
+                raise VKAuthError(
+                    "Сеанс авторизации отменён или истёк. Начните вход заново."
+                ) from exc
             details = exc.details
             error = str(details.get("error") or "")
 
@@ -395,6 +403,7 @@ class VKAuthManager:
                 if sid and sid != session.get("requested_sid"):
                     try:
                         await request_vk_validation(sid)
+                        self._ensure_active(challenge_id, session)
                     except VKAuthError:
                         self._discard(challenge_id)
                         raise
@@ -423,16 +432,23 @@ class VKAuthManager:
 
             self._discard(challenge_id)
             raise VKAuthError(f"Неподдерживаемый ответ VK: {error or 'unknown'}") from exc
-        except Exception:
+        except Exception as exc:
+            if self.pending.get(challenge_id) is not session:
+                raise VKAuthError(
+                    "Сеанс авторизации отменён или истёк. Начните вход заново."
+                ) from exc
             self._discard(challenge_id)
             raise
 
+        self._ensure_active(challenge_id, session)
         user_agent = VkMobileClient.user_agent
         service = Service(user_agent=user_agent, token=token)
         try:
             if not await service.is_token_valid_async():
                 raise VKAuthError("VK выдал токен, но проверка токена не прошла")
+            self._ensure_active(challenge_id, session)
             user = await service.get_user_info_async()
+            self._ensure_active(challenge_id, session)
             user_id = str(getattr(user, "userid", "") or "")
             save_credentials(self.database_path, token, user_agent, user_id or None)
         except VKAuthError:
