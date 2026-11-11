@@ -15,6 +15,7 @@ let currentTrackIndex = -1;
 let outputMode = "browser";
 let currentPlaylistId = null;
 let eventReconnectDelay = 3000;
+let eventSocket = null;
 
 function applyServerPlaybackState(state) {
   if (!state || outputMode !== "server") return;
@@ -34,21 +35,30 @@ function applyServerPlaybackState(state) {
 }
 
 function connectEvents() {
-  const url = new URL("api/v1/events", document.baseURI);
-  url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const socket = new WebSocket(url);
-  socket.addEventListener("open", () => { eventReconnectDelay = 3000; });
-  socket.addEventListener("message", event => {
-    try {
-      const message = JSON.parse(event.data);
-      if (message.type === "playback.state") applyServerPlaybackState(message.data);
-    } catch (err) {}
-  });
-  socket.addEventListener("close", () => {
+  if (!("WebSocket" in window)) return;
+  if (eventSocket && (eventSocket.readyState === WebSocket.CONNECTING || eventSocket.readyState === WebSocket.OPEN)) return;
+  try {
+    const url = new URL("api/v1/events", document.baseURI);
+    url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const socket = new WebSocket(url);
+    eventSocket = socket;
+    socket.addEventListener("open", () => { eventReconnectDelay = 3000; });
+    socket.addEventListener("message", event => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message.type === "playback.state") applyServerPlaybackState(message.data);
+      } catch (err) {}
+    });
+    socket.addEventListener("close", () => {
+      if (eventSocket === socket) eventSocket = null;
+      setTimeout(connectEvents, eventReconnectDelay);
+      eventReconnectDelay = Math.min(eventReconnectDelay * 2, 60000);
+    });
+    socket.addEventListener("error", () => socket.close());
+  } catch (err) {
     setTimeout(connectEvents, eventReconnectDelay);
     eventReconnectDelay = Math.min(eventReconnectDelay * 2, 60000);
-  });
-  socket.addEventListener("error", () => socket.close());
+  }
 }
 
 async function call(path, options={}) {
@@ -69,8 +79,7 @@ async function finishLogin() {
   challengeId = null;
   challengeType = null;
   $("challenge").style.display = "none";
-  await connectEvents();
-refreshStatus();
+  await refreshStatus();
   $("message").textContent = "VK успешно подключён.";
   $("message").className = "msg ok";
 }
@@ -538,4 +547,5 @@ $("deleteButton").addEventListener("click",async()=>{
   } catch(err) {$("message").textContent=err.message;}
   finally {$("deleteButton").disabled=false;}
 });
+connectEvents();
 refreshStatus();
