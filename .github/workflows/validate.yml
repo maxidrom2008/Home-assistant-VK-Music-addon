@@ -138,3 +138,21 @@ jobs:
             ${{ needs.prepare.outputs.version }}
             edge
           registry-prefix: ${{ needs.prepare.outputs.registry_prefix }}
+
+
+  verify_public:
+    name: Verify public multi-architecture image
+    needs: [prepare, manifest]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Verify anonymous GHCR pull and architecture manifest
+        env:
+          IMAGE: ${{ needs.prepare.outputs.registry_prefix }}/${{ needs.prepare.outputs.image_name }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          docker buildx imagetools inspect "${IMAGE}:${VERSION}" | tee image-manifest.txt
+          grep -q "linux/amd64" image-manifest.txt
+          grep -q "linux/arm64" image-manifest.txt
