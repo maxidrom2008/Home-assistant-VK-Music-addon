@@ -106,3 +106,33 @@ def test_server_playback_does_not_report_failed_ffmpeg_start_as_playing(
         assert player.get_state()["state"] == "error"
 
     asyncio.run(scenario())
+
+
+def test_playback_monitor_publishes_when_ffmpeg_exits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    process = FakeProcess()
+    states = []
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        return process
+
+    async def on_state_change(state):
+        states.append(state)
+
+    monkeypatch.setattr(playback.asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+
+    async def scenario():
+        player = ServerPlaybackManager(on_state_change=on_state_change)
+        await player.play(
+            "https://cdn.vk.example/audio.mp3",
+            "VK test UA",
+            {"id": "1_2", "title": "Test", "artist": "Artist", "duration": 180},
+        )
+        process.returncode = 0
+        process._done.set()
+        await asyncio.sleep(0.01)
+        assert states
+        assert states[-1]["state"] == "idle"
+
+    asyncio.run(scenario())

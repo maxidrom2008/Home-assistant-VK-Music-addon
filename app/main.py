@@ -50,7 +50,13 @@ async def lifespan(app: FastAPI):
     app.state.supervisor_info = await supervisor_app_info()
     app.state.auth_manager = VKAuthManager(settings.database_path)
     app.state.event_hub = EventHub()
-    app.state.playback_manager = ServerPlaybackManager()
+
+    async def publish_playback_state(state: dict) -> None:
+        await app.state.event_hub.publish("playback.state", state)
+
+    app.state.playback_manager = ServerPlaybackManager(
+        on_state_change=publish_playback_state
+    )
     try:
         yield
     finally:

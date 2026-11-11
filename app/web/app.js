@@ -14,6 +14,42 @@ let loadSequence = 0;
 let currentTrackIndex = -1;
 let outputMode = "browser";
 let currentPlaylistId = null;
+let eventReconnectDelay = 3000;
+
+function applyServerPlaybackState(state) {
+  if (!state || outputMode !== "server") return;
+  if (state.track) {
+    $("nowPlaying").textContent = (state.track.artist ? state.track.artist + " — " : "") + (state.track.title || "Без названия");
+  } else if (state.state === "idle") {
+    $("nowPlaying").textContent = "Ничего не воспроизводится";
+    currentTrackIndex = -1;
+  }
+  $("outputStatus").textContent = state.state === "playing"
+    ? "Играет через HAOS · " + (state.output || "PulseAudio")
+    : state.state === "paused"
+      ? "Серверный плеер на паузе"
+      : state.state === "error"
+        ? (state.error || "Ошибка серверного вывода")
+        : "Серверный плеер остановлен";
+}
+
+function connectEvents() {
+  const url = new URL("api/v1/events", document.baseURI);
+  url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const socket = new WebSocket(url);
+  socket.addEventListener("open", () => { eventReconnectDelay = 3000; });
+  socket.addEventListener("message", event => {
+    try {
+      const message = JSON.parse(event.data);
+      if (message.type === "playback.state") applyServerPlaybackState(message.data);
+    } catch (err) {}
+  });
+  socket.addEventListener("close", () => {
+    setTimeout(connectEvents, eventReconnectDelay);
+    eventReconnectDelay = Math.min(eventReconnectDelay * 2, 60000);
+  });
+  socket.addEventListener("error", () => socket.close());
+}
 
 async function call(path, options={}) {
   const response = await fetch(api(path), {headers:{"Content-Type":"application/json"}, ...options});
@@ -33,7 +69,8 @@ async function finishLogin() {
   challengeId = null;
   challengeType = null;
   $("challenge").style.display = "none";
-  await refreshStatus();
+  await connectEvents();
+refreshStatus();
   $("message").textContent = "VK успешно подключён.";
   $("message").className = "msg ok";
 }
@@ -265,8 +302,7 @@ async function setOutputMode(mode) {
     $("outputStatus").textContent = "Следующий выбранный трек будет играть через аудиовыход HAOS.";
     try {
       const state = await call("playback/state");
-      if (state.state === "error") $("outputStatus").textContent = state.error || "Ошибка серверного вывода.";
-      else if (state.track) $("nowPlaying").textContent = (state.track.artist ? state.track.artist + " — " : "") + state.track.title;
+      applyServerPlaybackState(state);
     } catch (err) {
       $("outputStatus").textContent = err.message;
     }

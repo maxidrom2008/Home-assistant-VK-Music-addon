@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import signal
 import time
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 
 class PlaybackError(Exception):
@@ -17,8 +17,13 @@ PLAYBACK_STARTUP_GRACE_SECONDS = 0.4
 class ServerPlaybackManager:
     """Own one FFmpeg process connected to the Supervisor audio service."""
 
-    def __init__(self, ffmpeg_binary: str = "ffmpeg") -> None:
+    def __init__(
+        self,
+        ffmpeg_binary: str = "ffmpeg",
+        on_state_change: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+    ) -> None:
         self.ffmpeg_binary = ffmpeg_binary
+        self._on_state_change = on_state_change
         self._process: asyncio.subprocess.Process | None = None
         self._monitor_task: asyncio.Task | None = None
         self._lock = asyncio.Lock()
@@ -150,6 +155,12 @@ class ServerPlaybackManager:
                         "устройство вывода звука в настройках Home Assistant."
                     ),
                 }
+        if self._on_state_change is not None:
+            try:
+                await self._on_state_change(self.get_state())
+            except Exception:
+                # Event delivery must never break playback process monitoring.
+                pass
 
     async def _stop_locked(self) -> None:
         process = self._process
