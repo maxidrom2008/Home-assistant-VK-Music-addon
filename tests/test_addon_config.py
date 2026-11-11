@@ -27,3 +27,24 @@ def test_hacs_custom_integration_manifest_is_present() -> None:
     assert manifest["config_flow"] is True
     assert manifest["version"] == "1.0.0-rc.1"
     assert manifest["issue_tracker"].endswith("/issues")
+
+
+def test_release_versions_are_synchronized() -> None:
+    import json
+    import tomllib
+
+    from app.version import VERSION
+
+    app_manifest = yaml.safe_load(Path("config.yaml").read_text(encoding="utf-8"))
+    integration = json.loads(
+        Path("custom_components/vk_music_server/manifest.json").read_text(encoding="utf-8")
+    )
+    web_package = json.loads(
+        Path("app/web/package.json").read_text(encoding="utf-8")
+    )
+    project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+
+    assert app_manifest["version"] == VERSION
+    assert integration["version"] == VERSION
+    assert web_package["version"] == VERSION
+    assert project["project"]["version"] == "1.0.0rc1"
