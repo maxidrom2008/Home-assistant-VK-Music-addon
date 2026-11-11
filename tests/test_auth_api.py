@@ -93,4 +93,6 @@ def test_deleting_token_stops_server_playback(monkeypatch) -> None:
 
     assert response.status_code == 200
     assert response.json()["deleted"] is True
-    assert stopped == [True]
+    # Token deletion stops playback; the app lifespan also stops it on shutdown.
+    assert stopped
+    assert stopped[0] is True
