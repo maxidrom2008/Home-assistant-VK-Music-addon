@@ -1,6 +1,6 @@
 """Thin adapter over vkpymusic; temporary stream URLs stay server-side."""
-from typing import Any
 import re
+from typing import Any
 
 from vkpymusic import Service, VkMobileClient
 
