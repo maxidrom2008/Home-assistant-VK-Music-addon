@@ -1,5 +1,6 @@
 """Thin adapter over vkpymusic; temporary stream URLs stay server-side."""
 from typing import Any
+import re
 
 from vkpymusic import Service, VkMobileClient
 
@@ -99,8 +100,7 @@ async def list_playlist_tracks(
 
 
 async def resolve_track(service: Service, track_id: str) -> dict[str, Any]:
-    parts = track_id.split("_", 1)
-    if len(parts) != 2 or not all(parts):
+    if not re.fullmatch(r"-?\d+_-?\d+", track_id):
         raise ValueError("Некорректный идентификатор VK-трека")
     songs = await service.get_songs_by_id_async([track_id])
     if not songs or not getattr(songs[0], "url", None):
