@@ -17,7 +17,7 @@ from homeassistant.components.media_player.const import (
     MediaPlayerState,
     MediaType,
 )
-from homeassistant.components.media_player.errors import BrowseError
+from homeassistant.components.media_player.errors import BrowseError, SearchError
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -251,7 +251,14 @@ class VKMusicServerMediaPlayer(MediaPlayerEntity):
     async def async_search_media(self, query: SearchMediaQuery) -> SearchMedia:
         """Search VK audio and return playable media-browser results."""
         search_query = query.search_query.strip()
-        if not search_query or query.media_content_type not in (None, MediaType.MUSIC, "music"):
+        if (
+            not search_query
+            or query.media_content_type not in (None, MediaType.MUSIC, "music")
+            or (
+                query.media_filter_classes
+                and MediaClass.TRACK not in query.media_filter_classes
+            )
+        ):
             return SearchMedia(result=[])
 
         from urllib.parse import urlencode
@@ -260,7 +267,7 @@ class VKMusicServerMediaPlayer(MediaPlayerEntity):
         try:
             data = await self.api.get(f"search?{params}")
         except VKMusicServerApiError as exc:
-            raise BrowseError(str(exc)) from exc
+            raise SearchError(str(exc)) from exc
 
         results = [
             BrowseMedia(
