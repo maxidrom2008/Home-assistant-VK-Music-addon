@@ -31,6 +31,8 @@ This checkpoint adds:
 
 ## Home Assistant media_player integration
 
+The companion integration requires Home Assistant Core 2025.5.0 or newer (native media-player search support).
+
 The repository includes a companion custom integration at `custom_components/vk_music_server`.
 
 **Manual installation (available now):** copy the folder `custom_components/vk_music_server` into `/config/custom_components/vk_music_server` on Home Assistant, then restart Home Assistant.

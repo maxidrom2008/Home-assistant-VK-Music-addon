@@ -37,6 +37,7 @@ Run this on a Home Assistant OS installation. Keep the existing Music Assistant 
 
 - [ ] Install `custom_components/vk_music_server` under `/config/custom_components/vk_music_server` or through a configured HACS custom repository.
 - [ ] Restart Home Assistant.
+- [ ] Confirm Home Assistant Core is 2025.5.0 or newer.
 - [ ] Add the VK Music Server integration using the internal URL displayed in the app panel.
 - [ ] Confirm `media_player.vk_music_server` is created and available.
 - [ ] Browse personal tracks and playlists from Home Assistant.
