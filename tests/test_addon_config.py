@@ -176,3 +176,36 @@ def test_checkout_steps_do_not_persist_github_tokens() -> None:
             for step in job.get("steps", []):
                 if str(step.get("uses", "")).startswith("actions/checkout@"):
                     assert step.get("with", {}).get("persist-credentials") is False
+
+
+def test_python_runtime_lock_covers_direct_dependencies_and_is_used() -> None:
+    from pathlib import Path
+
+    direct = {}
+    for line in Path("requirements.txt").read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            name, version = line.split("==", 1)
+            direct[name.split("[", 1)[0].lower().replace("_", "-")] = version
+
+    locked = {}
+    lock_lines = [
+        line.strip()
+        for line in Path("requirements.lock.txt").read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    assert lock_lines
+    for line in lock_lines:
+        name, version = line.split("==", 1)
+        locked[name.lower().replace("_", "-")] = version
+
+    assert direct
+    assert all(locked.get(name) == version for name, version in direct.items())
+
+    dev_lines = Path("requirements-dev.txt").read_text(encoding="utf-8").splitlines()
+    assert "-r requirements.lock.txt" in dev_lines
+    assert "pytest==9.2.0" in dev_lines
+    assert "requirements.lock.txt" in Path("Dockerfile").read_text(encoding="utf-8")
+    assert "pip install -r requirements-dev.txt" in Path(
+        ".github/workflows/validate.yml"
+    ).read_text(encoding="utf-8")
