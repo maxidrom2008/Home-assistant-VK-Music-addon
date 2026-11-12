@@ -142,3 +142,119 @@ def test_playback_monitor_publishes_when_ffmpeg_exits(
         assert states[-1]["state"] == "idle"
 
     asyncio.run(scenario())
+
+
+def test_set_volume_targets_the_selected_sink_or_the_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "test-supervisor-token")
+    posted: list[dict[str, object]] = []
+
+    class FakeResponse:
+        def __init__(self, payload=None) -> None:
+            self.payload = payload or {}
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self):
+            return self.payload
+
+    class FakeSupervisorClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return False
+
+        async def get(self, url, headers=None):
+            assert url == "http://supervisor/audio/info"
+            return FakeResponse(
+                {
+                    "data": {
+                        "audio": {
+                            "output": [
+                                {"name": "default_sink", "index": 1, "default": True},
+                                {"name": "selected_sink", "index": 2, "default": False},
+                            ]
+                        }
+                    }
+                }
+            )
+
+        async def post(self, url, headers=None, json=None):
+            assert url == "http://supervisor/audio/volume/output"
+            posted.append(json)
+            return FakeResponse()
+
+    monkeypatch.setattr(playback.httpx, "AsyncClient", FakeSupervisorClient)
+
+    async def scenario():
+        player = ServerPlaybackManager()
+        player._output_device = "selected_sink"
+        assert await player.set_volume(0.35) == {"volume": 0.35}
+        player._output_device = "default"
+        assert await player.set_volume(0.6) == {"volume": 0.6}
+
+        assert posted == [
+            {"index": 2, "volume": 0.35},
+            {"index": 1, "volume": 0.6},
+        ]
+
+    asyncio.run(scenario())
+
+
+def test_set_volume_falls_back_to_pactl_when_supervisor_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "test-supervisor-token")
+    captured: list[tuple[object, ...]] = []
+
+    class UnavailableSupervisorClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return False
+
+        async def get(self, url, headers=None):
+            raise playback.httpx.ConnectError("Supervisor is unavailable")
+
+    class SuccessfulProcess:
+        returncode = 0
+
+        async def communicate(self):
+            return b"", b""
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        captured.append(args)
+        return SuccessfulProcess()
+
+    monkeypatch.setattr(playback.httpx, "AsyncClient", UnavailableSupervisorClient)
+    monkeypatch.setattr(playback.asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+
+    async def scenario():
+        player = ServerPlaybackManager()
+        player._output_device = "selected_sink"
+        assert await player.set_volume(0.45) == {"volume": 0.45}
+        assert captured == [
+            ("pactl", "set-sink-volume", "selected_sink", "45%")
+        ]
+
+    asyncio.run(scenario())
+
+
+def test_set_volume_reports_missing_pactl_as_playback_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+
+    async def missing_pactl(*args, **kwargs):
+        raise FileNotFoundError("pactl")
+
+    monkeypatch.setattr(playback.asyncio, "create_subprocess_exec", missing_pactl)
+
+    async def scenario():
+        player = ServerPlaybackManager()
+        with pytest.raises(PlaybackError, match="pactl"):
+            await player.set_volume(0.5)
+
+    asyncio.run(scenario())
