@@ -11,8 +11,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg libpulse
     && ffmpeg -hide_banner -devices 2>&1 | grep -q pulse \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.lock.txt .
+RUN pip install --no-cache-dir -r requirements.lock.txt
 COPY app ./app
 COPY --from=web-build /web/app.bundle.js ./app/web/app.bundle.js
 RUN mkdir -p /data
