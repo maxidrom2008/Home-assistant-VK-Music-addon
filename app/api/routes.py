@@ -362,14 +362,20 @@ async def playback_server_stop(request: Request) -> dict[str, object]:
 
 
 @router.get("/tracks/{track_id}/stream")
-async def track_stream(track_id: str, request: Request):
+async def track_stream(
+    track_id: str,
+    request: Request,
+    start: float = Query(0.0, ge=0.0, le=86400.0),
+):
     credentials = get_credentials(request.app.state.database_path)
     if not credentials:
         raise HTTPException(status_code=401, detail="Сначала подключите VK")
     try:
         service = make_service(credentials)
         url = await resolve_stream(service, track_id)
-        return await proxy_audio(url, credentials["user_agent"], request.headers.get("range"))
+        return await proxy_audio(
+            url, credentials["user_agent"], request.headers.get("range"), start_seconds=start
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except LookupError as exc:

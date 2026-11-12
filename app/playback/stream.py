@@ -10,22 +10,23 @@ from fastapi.responses import StreamingResponse
 _LOGGER = logging.getLogger(__name__)
 
 
-def ffmpeg_command(url: str, user_agent: str) -> list[str]:
+def ffmpeg_command(url: str, user_agent: str, start_seconds: float = 0.0) -> list[str]:
     """Build a command that turns VK audio/HLS into a browser-safe MP3 stream."""
     return [
         "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "warning",
         "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
         "-user_agent", user_agent, "-i", url,
+        *(["-ss", f"{max(0.0, float(start_seconds)):.3f}"] if start_seconds > 0 else []),
         "-map", "0:a:0", "-vn", "-sn", "-dn",
         "-codec:a", "libmp3lame", "-q:a", "4", "-f", "mp3", "pipe:1",
     ]
 
 
-async def proxy_audio(url: str, user_agent: str, range_header: str | None = None) -> StreamingResponse:
+async def proxy_audio(url: str, user_agent: str, range_header: str | None = None, start_seconds: float = 0.0) -> StreamingResponse:
     """Transcode the resolved VK source so browsers never need to fetch VK HLS segments."""
     if not url.startswith("https://"):
         raise HTTPException(status_code=502, detail="VK вернул неподдерживаемый адрес аудиопотока")
-    command = ffmpeg_command(url, user_agent)
+    command = ffmpeg_command(url, user_agent, start_seconds)
     try:
         process = await asyncio.create_subprocess_exec(
             *command,

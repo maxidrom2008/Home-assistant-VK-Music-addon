@@ -20,6 +20,7 @@ let browserTrackDuration = 0;
 let timelineFrame = 0;
 let timelineSeeking = false;
 let playbackVolume = 0.8;
+let currentBrowserTrackId = null;
 
 function applyServerPlaybackState(state) {
   if (!state || outputMode !== "server") return;
@@ -161,7 +162,6 @@ function renderBrowserTimeline() {
   const percent = duration > 0 ? Math.min(100, Math.max(0, elapsed / duration * 100)) : 0;
   $("elapsedTime").textContent = formatDuration(elapsed);
   $("totalTime").textContent = formatDuration(duration);
-  $("timelineProgress").style.width = percent.toFixed(3) + "%";
   if (!timelineSeeking) $("timelineSeek").value = String(Math.round(elapsed));
   $("timelineRail").setAttribute("aria-valuenow", String(Math.round(percent)));
   if (!audio.paused && !audio.ended && outputMode === "browser") {
@@ -175,7 +175,6 @@ function startBrowserTimeline(duration) {
   $("browserTimeline").hidden = false;
   $("elapsedTime").textContent = "0:00";
   $("totalTime").textContent = formatDuration(browserTrackDuration);
-  $("timelineProgress").style.width = "0%"; $("timelineSeek").max = String(browserTrackDuration); $("timelineSeek").value = "0"; $("timelineSeek").disabled = browserTrackDuration <= 0;
   if (timelineFrame) cancelAnimationFrame(timelineFrame);
   timelineFrame = requestAnimationFrame(renderBrowserTimeline);
 }
@@ -304,6 +303,7 @@ async function playTrack(index) {
   const track = currentItems[index];
   if (!track || !track.id) return;
   currentTrackIndex = index;
+  currentBrowserTrackId = String(track.id);
   $("nowPlaying").textContent = (track.artist ? track.artist + " — " : "") + (track.title || "Без названия");
   startBrowserTimeline(track.duration);
   if (outputMode === "server") {
@@ -610,9 +610,22 @@ $("browserPause").addEventListener("click", () => $("audio").pause());
 $("browserResume").addEventListener("click", async () => { try { await $("audio").play(); } catch(e) { $("libraryMessage").textContent=e.message; } });
 $("browserStop").addEventListener("click", () => { const a=$("audio"); a.pause(); a.currentTime=0; a.removeAttribute("src"); a.load(); $("browserPause").hidden=true; $("browserResume").hidden=true; $("browserStop").hidden=true; renderBrowserTimeline(); });
 $("timelineSeek").addEventListener("pointerdown",()=>timelineSeeking=true);
-$("timelineSeek").addEventListener("input",e=>{const v=Number(e.target.value)||0;$("elapsedTime").textContent=formatDuration(v);$("timelineProgress").style.width=(browserTrackDuration?v/browserTrackDuration*100:0)+"%";});
-$("timelineSeek").addEventListener("change",e=>{const a=$("audio");if(outputMode==="browser"&&Number.isFinite(a.duration)){try{a.currentTime=Math.min(Number(e.target.value)||0,a.duration);}catch(err){$("libraryMessage").textContent=err.message;}}timelineSeeking=false;renderBrowserTimeline();});
-$("timelineSeek").addEventListener("pointerup",()=>timelineSeeking=false);
+$("timelineSeek").addEventListener("change", async e => {
+  const seconds = Math.max(0, Math.min(browserTrackDuration, Number(e.target.value) || 0));
+  timelineSeeking = false;
+  if (outputMode !== "browser" || !currentBrowserTrackId) return;
+  const audio = $("audio");
+  const wasPlaying = !audio.paused;
+  audio.src = api("tracks/" + encodeURIComponent(currentBrowserTrackId) + "/stream?start=" + seconds.toFixed(1));
+  try {
+    if (wasPlaying) await audio.play();
+    else audio.load();
+  } catch (err) {
+    $("libraryMessage").textContent = "Не удалось перемотать трек: " + err.message;
+  }
+  renderBrowserTimeline();
+});
+$("timelineSeek").addEventListener("pointerup",()=>{timelineSeeking=false;});
 $("volumeControl").addEventListener("input",async e=>{playbackVolume=Math.max(0,Math.min(1,Number(e.target.value)/100));$("volumeValue").textContent=Math.round(playbackVolume*100)+"%";$("audio").volume=playbackVolume;if(outputMode==="server"){try{await call("playback/volume",{method:"POST",body:JSON.stringify({volume:playbackVolume})});}catch(err){$("outputStatus").textContent="Ошибка громкости: "+err.message;}}});
 $("audioOutput").addEventListener("change", event => setAudioOutput(event.target.value));
 $("refreshOutputs").addEventListener("click", refreshAudioOutputs);
@@ -620,7 +633,6 @@ $("audio").addEventListener("play",()=>{$("browserPause").hidden=false;$("browse
 $("audio").addEventListener("pause",()=>{if(timelineFrame)cancelAnimationFrame(timelineFrame);timelineFrame=0;if(outputMode==="browser"){$("browserPause").hidden=true;$("browserResume").hidden=!$("audio").src||$("audio").ended;$("browserStop").hidden=!$("audio").src;renderBrowserTimeline();}});
 $("audio").addEventListener("ended", () => {
   stopBrowserTimeline();
-  $("timelineProgress").style.width = "100%";
   $("elapsedTime").textContent = formatDuration(browserTrackDuration);
   playNext();
 });
