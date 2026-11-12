@@ -25,7 +25,7 @@ def test_hacs_custom_integration_manifest_is_present() -> None:
     )
     assert manifest["domain"] == "vk_music_server"
     assert manifest["config_flow"] is True
-    assert manifest["version"] == "1.0.0-rc.7"
+    assert manifest["version"] == "1.0.0-rc.8"
     assert manifest["issue_tracker"].endswith("/issues")
 
 
