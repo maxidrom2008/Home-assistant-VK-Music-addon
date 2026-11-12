@@ -1,4 +1,5 @@
-fastapi>=0.115,<1
-uvicorn[standard]>=0.30,<1
-httpx>=0.27,<1
+# Direct runtime dependencies pinned to versions validated by GitHub Actions.
+fastapi==0.162.5
+uvicorn[standard]==0.54.0
+httpx==0.28.1
 vkpymusic==4.0.2
