@@ -31,6 +31,8 @@ class ServerPlaybackManager:
         self._process: asyncio.subprocess.Process | None = None
         self._monitor_task: asyncio.Task | None = None
         self._lock = asyncio.Lock()
+        self._output_device = "default"
+        self._output_label = "По умолчанию"
         self._state: dict[str, Any] = {
             "state": "idle",
             "mode": "server",
@@ -40,8 +42,6 @@ class ServerPlaybackManager:
         }
         self._position = 0.0
         self._position_mark: float | None = None
-        self._output_device = "default"
-        self._output_label = "По умолчанию"
 
     async def list_outputs(self) -> dict[str, Any]:
         """List available PulseAudio sinks exposed by Home Assistant."""
