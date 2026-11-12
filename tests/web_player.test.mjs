@@ -176,9 +176,9 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
   };
 
   try {
-    // Loading the actual application module catches missing DOM references
+    // Loading the production bundle catches missing DOM references
     // during initialization, not just JavaScript syntax errors.
-    await import("../app/web/app.js");
+    await import("../app/web/app.bundle.js");
 
     await waitFor(
       () => window.document.querySelector("#trackList button"),
