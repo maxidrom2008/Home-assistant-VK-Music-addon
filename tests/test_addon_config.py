@@ -158,6 +158,14 @@ def test_pull_request_builds_do_not_receive_publish_credentials() -> None:
     pull_request_build = workflow["jobs"]["build_validate"]
     assert pull_request_build["if"] == "github.event_name == 'pull_request'"
     assert pull_request_build["permissions"] == {"contents": "read"}
+    matrix_arches = {
+        item["arch"]: (item["os"], item["platform"])
+        for item in pull_request_build["strategy"]["matrix"]["include"]
+    }
+    assert matrix_arches == {
+        "amd64": ("ubuntu-latest", "linux/amd64"),
+        "aarch64": ("ubuntu-24.04-arm", "linux/arm64"),
+    }
     assert all(
         "container-registry-password" not in str(step.get("with", {}))
         for step in pull_request_build["steps"]
