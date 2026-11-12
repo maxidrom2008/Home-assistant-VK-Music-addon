@@ -1,5 +1,5 @@
 name: VK Music Server
-version: "1.0.0-rc.11"
+version: "1.0.0-rc.12"
 slug: vk_music_server
 description: Standalone VK Music server with persistent VK login, library and streaming
 url: https://github.com/maxidrom2008/Home-assistant-VK-Music-addon
