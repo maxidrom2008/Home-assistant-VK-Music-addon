@@ -65,8 +65,8 @@ jobs:
       - name: Normalize app metadata
         id: normalize
         env:
-          # Step outputs are untrusted input on pull_request workflows.
-          # Keep them in the environment; never interpolate them into shell source.
+          # Home Assistant's info helper emits JSON-encoded scalar outputs.
+          # Keep these untrusted values in the environment, not in shell source.
           IMAGE: ${{ steps.info.outputs.image }}
           VERSION: ${{ steps.info.outputs.version }}
           APP_NAME: ${{ steps.info.outputs.name }}
@@ -75,11 +75,21 @@ jobs:
         run: |
           set -euo pipefail
 
-          image="${IMAGE:?Home Assistant metadata did not provide an image}"
-          version="${VERSION:?Home Assistant metadata did not provide a version}"
+          # Decode the JSON strings emitted by home-assistant/actions/helpers/info.
+          # A null optional value becomes an empty string; other types are rejected.
+          decode_metadata() {
+            local raw="$1"
+            jq -er 'if type == "string" then . elif type == "null" then "" else error("metadata value must be a string or null") end' <<< "$raw"
+          }
+
+          image="$(decode_metadata "${IMAGE:?Home Assistant metadata did not provide an image}")"
+          version="$(decode_metadata "${VERSION:?Home Assistant metadata did not provide a version}")"
+          raw_name="$(decode_metadata "${APP_NAME:?Home Assistant metadata did not provide a name}")"
+          raw_description="$(decode_metadata "${APP_DESCRIPTION:?Home Assistant metadata did not provide a description}")"
+          raw_url="$(decode_metadata "${APP_URL:-null}")"
 
           # Validate values that later become image references and tags.
-          if [[ ! "$image" =~ ^ghcr\.io/[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$ ]]; then
+          if [[ ! "$image" =~ ^ghcr\\.io/[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$ ]]; then
             echo "Invalid container image reference in app metadata" >&2
             exit 1
           fi
@@ -92,34 +102,34 @@ jobs:
           # so a pull request cannot inject additional workflow outputs.
           single_line() {
             local value="$1"
-            value="${value//$'\r'/ }"
-            value="${value//$'\n'/ }"
+            value="${value//$'\\r'/ }"
+            value="${value//$'\\n'/ }"
             printf '%s' "$value"
           }
 
           image_name="${image##*/}"
           registry_prefix="${image%/*}"
-          app_name="$(single_line "${APP_NAME:-}")"
-          app_description="$(single_line "${APP_DESCRIPTION:-}")"
-          app_url="$(single_line "${APP_URL:-}")"
+          app_name="$(single_line "$raw_name")"
+          app_description="$(single_line "$raw_description")"
+          app_url="$(single_line "$raw_url")"
 
           if [[ -z "$app_name" || -z "$app_description" ]]; then
             echo "App name and description must be present in app metadata" >&2
             exit 1
           fi
-          if [[ -n "$app_url" && "$app_url" != "null" && ! "$app_url" =~ ^https?://[^[:space:]]+$ ]]; then
+          if [[ -n "$app_url" && ! "$app_url" =~ ^https?://[^[:space:]]+$ ]]; then
             echo "Invalid URL in app metadata" >&2
             exit 1
           fi
 
           {
-            printf 'image_name=%s\n' "$image_name"
-            printf 'registry_prefix=%s\n' "$registry_prefix"
-            printf 'version=%s\n' "$version"
-            printf 'name=%s\n' "$app_name"
-            printf 'description=%s\n' "$app_description"
-            if [[ -n "$app_url" && "$app_url" != "null" ]]; then
-              printf 'url=%s\n' "$app_url"
+            printf 'image_name=%s\\n' "$image_name"
+            printf 'registry_prefix=%s\\n' "$registry_prefix"
+            printf 'version=%s\\n' "$version"
+            printf 'name=%s\\n' "$app_name"
+            printf 'description=%s\\n' "$app_description"
+            if [[ -n "$app_url" ]]; then
+              printf 'url=%s\\n' "$app_url"
             fi
           } >> "$GITHUB_OUTPUT"
       - name: Prepare architecture matrix
