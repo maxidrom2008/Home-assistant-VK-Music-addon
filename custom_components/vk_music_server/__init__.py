@@ -2,8 +2,9 @@
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 
-from .api import VKMusicServerApiClient
+from .api import VKMusicServerApiClient, VKMusicServerApiError
 from .const import DOMAIN
 
 PLATFORMS = [Platform.MEDIA_PLAYER]
@@ -12,7 +13,12 @@ PLATFORMS = [Platform.MEDIA_PLAYER]
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up VK Music Server from a config entry."""
     client = VKMusicServerApiClient(entry.data["base_url"], hass)
-    await client.get("status")
+    try:
+        await client.get("status")
+    except VKMusicServerApiError as exc:
+        raise ConfigEntryNotReady(
+            f"VK Music Server is temporarily unavailable: {exc}"
+        ) from exc
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = client
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

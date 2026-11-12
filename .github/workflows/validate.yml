@@ -14,16 +14,18 @@ jobs:
     name: Python, API and browser checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12"
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt pytest
+          pip install -r requirements-dev.txt
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
       - name: Install and bundle browser dependencies
@@ -35,6 +37,8 @@ jobs:
         run: |
           node --check app/web/app.js
           node --check app/web/app.bundle.js
+      - name: Run browser DOM tests
+        run: node --test tests/web_player.test.mjs
       - name: Run tests
         env:
           VKMS_DATA_DIR: ${{ runner.temp }}/vkms-test-data
@@ -56,31 +60,87 @@ jobs:
       description: ${{ steps.normalize.outputs.description }}
       url: ${{ steps.normalize.outputs.url }}
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Read app metadata
         id: info
-        uses: home-assistant/actions/helpers/info@master
+        uses: home-assistant/actions/helpers/info@86d4564712fa02543c808e3a693dd04f9d3f8361 # master snapshot
         with:
           path: "."
       - name: Normalize app metadata
         id: normalize
+        env:
+          # Home Assistant's info helper emits JSON-encoded scalar outputs.
+          # Keep these untrusted values in the environment, not in shell source.
+          IMAGE: ${{ steps.info.outputs.image }}
+          VERSION: ${{ steps.info.outputs.version }}
+          APP_NAME: ${{ steps.info.outputs.name }}
+          APP_DESCRIPTION: ${{ steps.info.outputs.description }}
+          APP_URL: ${{ steps.info.outputs.url }}
         run: |
-          image=${{ steps.info.outputs.image }}
-          echo "image_name=${image##*/}" >> "$GITHUB_OUTPUT"
-          echo "registry_prefix=${image%/*}" >> "$GITHUB_OUTPUT"
-          version=${{ steps.info.outputs.version }}
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
-          name=${{ steps.info.outputs.name }}
-          echo "name=${name}" >> "$GITHUB_OUTPUT"
-          description=${{ steps.info.outputs.description }}
-          echo "description=${description}" >> "$GITHUB_OUTPUT"
-          url=${{ steps.info.outputs.url }}
-          if [[ -n "$url" && "$url" != "null" ]]; then
-            echo "url=${url}" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+
+          # Decode the JSON strings emitted by home-assistant/actions/helpers/info.
+          # A null optional value becomes an empty string; other types are rejected.
+          decode_metadata() {
+            local raw="$1"
+            jq -er 'if type == "string" then . elif type == "null" then "" else error("metadata value must be a string or null") end' <<< "$raw"
+          }
+
+          image="$(decode_metadata "${IMAGE:?Home Assistant metadata did not provide an image}")"
+          version="$(decode_metadata "${VERSION:?Home Assistant metadata did not provide a version}")"
+          raw_name="$(decode_metadata "${APP_NAME:?Home Assistant metadata did not provide a name}")"
+          raw_description="$(decode_metadata "${APP_DESCRIPTION:?Home Assistant metadata did not provide a description}")"
+          raw_url="$(decode_metadata "${APP_URL:-null}")"
+
+          # Validate values that later become image references and tags.
+          if [[ ! "$image" =~ ^ghcr\.io/[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$ ]]; then
+            echo "Invalid container image reference in app metadata" >&2
+            exit 1
           fi
+          if [[ ! "$version" =~ ^[0-9A-Za-z][0-9A-Za-z.+_-]*$ ]]; then
+            echo "Invalid version in app metadata" >&2
+            exit 1
+          fi
+
+          # GITHUB_OUTPUT is line-oriented. Remove CR/LF from descriptive metadata
+          # so a pull request cannot inject additional workflow outputs.
+          single_line() {
+            local value="$1"
+            value="${value//$'\r'/ }"
+            value="${value//$'\n'/ }"
+            printf '%s' "$value"
+          }
+
+          image_name="${image##*/}"
+          registry_prefix="${image%/*}"
+          app_name="$(single_line "$raw_name")"
+          app_description="$(single_line "$raw_description")"
+          app_url="$(single_line "$raw_url")"
+
+          if [[ -z "$app_name" || -z "$app_description" ]]; then
+            echo "App name and description must be present in app metadata" >&2
+            exit 1
+          fi
+          if [[ -n "$app_url" && ! "$app_url" =~ ^https?://[^[:space:]]+$ ]]; then
+            echo "Invalid URL in app metadata" >&2
+            exit 1
+          fi
+
+          {
+            printf 'image_name=%s\n' "$image_name"
+            printf 'registry_prefix=%s\n' "$registry_prefix"
+            printf 'version=%s\n' "$version"
+            printf 'name=%s\n' "$app_name"
+            printf 'description=%s\n' "$app_description"
+            if [[ -n "$app_url" ]]; then
+              printf 'url=%s\n' "$app_url"
+            fi
+          } >> "$GITHUB_OUTPUT"
       - name: Prepare architecture matrix
         id: matrix
-        uses: home-assistant/builder/actions/prepare-multi-arch-matrix@2026.09.0
+        uses: home-assistant/builder/actions/prepare-multi-arch-matrix@7412f0023ea9b6e58e8bb5059f1660f51376f49a # 2026.09.0
         with:
           architectures: ${{ steps.info.outputs.architectures }}
           image-name: ${{ steps.normalize.outputs.image_name }}
@@ -88,6 +148,7 @@ jobs:
 
   build:
     name: Build ${{ matrix.arch }} image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: prepare
     runs-on: ${{ matrix.os }}
     permissions:
@@ -98,11 +159,11 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.build_matrix) }}
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Build app image
-        uses: home-assistant/builder/actions/build-image@2026.09.0
+        uses: home-assistant/builder/actions/build-image@7412f0023ea9b6e58e8bb5059f1660f51376f49a # 2026.09.0
         with:
           arch: ${{ matrix.arch }}
           container-registry-password: ${{ secrets.GITHUB_TOKEN }}
@@ -119,6 +180,30 @@ jobs:
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           version: ${{ needs.prepare.outputs.version }}
 
+  build_validate:
+    name: Validate local ${{ matrix.arch }} image for pull requests
+    if: github.event_name == 'pull_request'
+    needs: test
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            os: ubuntu-latest
+            platform: linux/amd64
+          - arch: aarch64
+            os: ubuntu-24.04-arm
+            platform: linux/arm64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build ${{ matrix.arch }} image without registry credentials
+        run: docker build --platform ${{ matrix.platform }} --tag vk-music-server:pull-request .
+
   manifest:
     name: Publish multi-architecture manifest
     needs: [prepare, build]
@@ -129,7 +214,7 @@ jobs:
       packages: write
     steps:
       - name: Publish multi-architecture manifest
-        uses: home-assistant/builder/actions/publish-multi-arch-manifest@2026.09.0
+        uses: home-assistant/builder/actions/publish-multi-arch-manifest@7412f0023ea9b6e58e8bb5059f1660f51376f49a # 2026.09.0
         with:
           architectures: ${{ needs.prepare.outputs.architectures }}
           container-registry-password: ${{ secrets.GITHUB_TOKEN }}

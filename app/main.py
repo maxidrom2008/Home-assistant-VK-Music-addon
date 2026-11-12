@@ -58,6 +58,12 @@ async def lifespan(app: FastAPI):
     app.state.playback_manager = ServerPlaybackManager(
         on_state_change=publish_playback_state
     )
+    # Cache the initial state for WebSocket clients that connect after startup
+    # or reconnect after missing one or more playback events.
+    await app.state.event_hub.publish(
+        "playback.state",
+        app.state.playback_manager.get_state(),
+    )
     try:
         yield
     finally:
