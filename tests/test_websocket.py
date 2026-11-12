@@ -18,6 +18,10 @@ def test_websocket_supports_ping_and_broadcasts_playback_changes() -> None:
             ready = websocket.receive_json()
             assert ready["type"] == "server.ready"
 
+            initial_state = websocket.receive_json()
+            assert initial_state["type"] == "playback.state"
+            assert initial_state["data"]["state"] == "idle"
+
             websocket.send_text("ping")
             assert websocket.receive_json()["type"] == "server.pong"
 
