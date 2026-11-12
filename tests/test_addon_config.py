@@ -118,3 +118,20 @@ def test_direct_runtime_dependencies_are_exactly_pinned() -> None:
     for dependency in (*package.get("dependencies", {}).values(), *package.get("devDependencies", {}).values()):
         assert dependency and dependency[0].isdigit()
         assert not dependency.startswith(("^", "~", "*"))
+
+
+def test_github_actions_are_pinned_to_full_commit_shas() -> None:
+    import re
+    from pathlib import Path
+
+    for workflow_path in (
+        Path(".github/workflows/validate.yml"),
+        Path(".github/workflows/hassfest.yml"),
+    ):
+        workflow = workflow_path.read_text(encoding="utf-8")
+        action_refs = re.findall(r"^\\s*uses:\\s*([^\\s#]+)", workflow, re.MULTILINE)
+        assert action_refs, f"No actions found in {workflow_path}"
+        assert all(
+            re.search(r"@[0-9a-f]{40}$", action_ref)
+            for action_ref in action_refs
+        ), f"Action is not pinned to an immutable commit SHA in {workflow_path}"
