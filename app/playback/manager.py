@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import signal
 import time
+import logging
 from typing import Any, Awaitable, Callable
 
 
@@ -11,7 +12,7 @@ class PlaybackError(Exception):
     """A server-side playback operation could not be completed."""
 
 
-PLAYBACK_STARTUP_GRACE_SECONDS = 0.4
+_LOGGER = logging.getLogger(__name__)\n\nPLAYBACK_STARTUP_GRACE_SECONDS = 1.0
 
 
 class ServerPlaybackManager:
@@ -87,7 +88,7 @@ class ServerPlaybackManager:
                     *command,
                     stdin=asyncio.subprocess.DEVNULL,
                     stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.PIPE,
                 )
             except FileNotFoundError as exc:
                 raise PlaybackError("FFmpeg не найден в контейнере add-on") from exc

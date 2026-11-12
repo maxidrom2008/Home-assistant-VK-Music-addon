@@ -1,45 +1,67 @@
-"""HTTP proxy for short-lived VK audio URLs."""
-from collections.abc import AsyncIterator
+"""Browser-friendly audio transcoding for VK streams, including HLS playlists."""
+from __future__ import annotations
 
-import httpx
+import asyncio
+import logging
+
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 
+_LOGGER = logging.getLogger(__name__)
+
+
+def ffmpeg_command(url: str, user_agent: str) -> list[str]:
+    """Build a command that turns VK audio/HLS into a browser-safe MP3 stream."""
+    return [
+        "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "warning",
+        "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
+        "-user_agent", user_agent, "-i", url,
+        "-map", "0:a:0", "-vn", "-sn", "-dn",
+        "-codec:a", "libmp3lame", "-q:a", "4", "-f", "mp3", "pipe:1",
+    ]
+
 
 async def proxy_audio(url: str, user_agent: str, range_header: str | None = None) -> StreamingResponse:
-    # The URL is resolved by vkpymusic for a selected track; clients cannot supply it.
-    client = httpx.AsyncClient(timeout=httpx.Timeout(30.0, read=None), follow_redirects=True)
-    headers = {"User-Agent": user_agent}
-    if range_header:
-        headers["Range"] = range_header
+    """Transcode the resolved VK source so browsers never need to fetch VK HLS segments."""
+    if not url.startswith("https://"):
+        raise HTTPException(status_code=502, detail="VK вернул неподдерживаемый адрес аудиопотока")
+    command = ffmpeg_command(url, user_agent)
     try:
-        req = client.build_request("GET", url, headers=headers)
-        response = await client.send(req, stream=True)
-    except httpx.HTTPError as exc:
-        await client.aclose()
-        raise HTTPException(status_code=502, detail="Не удалось открыть аудиопоток VK") from exc
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail="FFmpeg не найден в контейнере add-on") from exc
+    except OSError as exc:
+        raise HTTPException(status_code=502, detail="Не удалось запустить обработчик аудиопотока") from exc
 
-    if response.status_code >= 400:
-        status_code = response.status_code
-        await response.aclose()
-        await client.aclose()
-        raise HTTPException(status_code=502, detail=f"VK CDN вернул HTTP {status_code}")
+    # Catch immediate failures before committing a successful HTTP response.
+    await asyncio.sleep(0.2)
+    if process.returncode is not None:
+        error = (await process.stderr.read()).decode("utf-8", "replace")[-1200:]
+        _LOGGER.warning("VK browser stream FFmpeg exited (%s): %s", process.returncode, error.strip())
+        raise HTTPException(status_code=502, detail="FFmpeg не смог открыть аудиопоток VK")
 
-    async def body() -> AsyncIterator[bytes]:
+    async def body():
         try:
-            async for chunk in response.aiter_bytes():
+            assert process.stdout is not None
+            while chunk := await process.stdout.read(64 * 1024):
                 yield chunk
+            return_code = await process.wait()
+            if return_code:
+                assert process.stderr is not None
+                error = (await process.stderr.read()).decode("utf-8", "replace")[-1200:]
+                _LOGGER.warning("VK browser stream FFmpeg exited (%s): %s", return_code, error.strip())
         finally:
-            await response.aclose()
-            await client.aclose()
+            if process.returncode is None:
+                process.kill()
+                await process.wait()
 
-    forwarded = {"cache-control": "no-store"}
-    for key in ("content-length", "content-range", "accept-ranges"):
-        if value := response.headers.get(key):
-            forwarded[key] = value
     return StreamingResponse(
         body(),
-        status_code=response.status_code,
-        media_type=response.headers.get("content-type", "audio/mpeg"),
-        headers=forwarded,
+        media_type="audio/mpeg",
+        headers={"cache-control": "no-store", "accept-ranges": "none"},
     )

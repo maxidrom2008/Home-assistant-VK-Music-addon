@@ -29,7 +29,7 @@ small{display:block;color:#9ca3af;margin-top:10px}
 .trackArtist{color:#9ca3af;font-size:13px;margin-top:3px}
 .trackDuration{color:#9ca3af;font-variant-numeric:tabular-nums;white-space:nowrap}
 .trackRow button{margin:0;padding:9px 12px}
-#player{margin-top:18px;padding:14px;background:#111827;border:1px solid #374151;border-radius:12px}
+#player{position:sticky;top:8px;z-index:5;margin-top:10px;padding:14px;background:#111827;border:1px solid #374151;border-radius:12px}
 #nowPlaying{font-weight:650;margin-bottom:10px}
 #audio{width:100%;margin-top:10px}
 #loadMore{display:none;width:100%}
@@ -54,20 +54,6 @@ small{display:block;color:#9ca3af;margin-top:10px}
 <button id="tokenButton" class="secondary" type="button">Проверить и сохранить токен</button>
 </section>
 <section id="music" hidden>
-<h2>Музыка</h2>
-<div class="toolbar">
-  <button id="libraryButton" type="button" class="secondary">Моя музыка</button>
-  <button id="playlistsButton" type="button" class="secondary">Мои плейлисты</button>
-  <button id="backToPlaylists" type="button" class="secondary" hidden>← К плейлистам</button>
-  <button id="clearSearchButton" type="button" class="secondary">Сбросить поиск</button>
-</div>
-<form id="searchForm" class="searchRow">
-  <input id="searchQuery" type="search" maxlength="200" placeholder="Поиск музыки в VK" aria-label="Поиск музыки">
-  <button type="submit">Найти</button>
-</form>
-<p id="libraryMessage" class="muted" role="status">Загрузка…</p>
-<div id="trackList" aria-live="polite"></div>
-<button id="loadMore" class="secondary" type="button">Загрузить ещё</button>
 <div id="player">
   <div id="nowPlaying">Ничего не воспроизводится</div>
   <div class="toolbar">
@@ -84,6 +70,20 @@ small{display:block;color:#9ca3af;margin-top:10px}
   <p id="outputStatus" class="muted">Воспроизведение в этом браузере</p>
   <audio id="audio" controls preload="none"></audio>
 </div>
+<h2>Музыка</h2>
+<div class="toolbar">
+  <button id="libraryButton" type="button" class="secondary">Моя музыка</button>
+  <button id="playlistsButton" type="button" class="secondary">Мои плейлисты</button>
+  <button id="backToPlaylists" type="button" class="secondary" hidden>← К плейлистам</button>
+  <button id="clearSearchButton" type="button" class="secondary">Сбросить поиск</button>
+</div>
+<form id="searchForm" class="searchRow">
+  <input id="searchQuery" type="search" maxlength="200" placeholder="Поиск музыки в VK" aria-label="Поиск музыки">
+  <button type="submit">Найти</button>
+</form>
+<p id="libraryMessage" class="muted" role="status">Загрузка…</p>
+<div id="trackList" aria-live="polite"></div>
+<button id="loadMore" class="secondary" type="button">Загрузить ещё</button>
 </section>
 <section id="challenge">
 <h2 id="challengeTitle">Подтверждение VK</h2>
