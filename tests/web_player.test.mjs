@@ -150,11 +150,28 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
   let currentTime = 0;
   let readyState = 0;
   let playCount = 0;
+  let audioSource = "";
 
   Object.defineProperties(audio, {
     paused: { configurable: true, get: () => paused },
     ended: { configurable: true, get: () => ended },
-    duration: { configurable: true, get: () => track.duration },
+    src: {
+      configurable: true,
+      get: () => audioSource,
+      set: (value) => {
+        audioSource = String(value);
+        currentTime = 0;
+        readyState = 0;
+      },
+    },
+    duration: {
+      configurable: true,
+      get: () => {
+        const start = new URL(audioSource || window.document.baseURI, window.document.baseURI)
+          .searchParams.get("start");
+        return track.duration - (Number(start) || 0);
+      },
+    },
     currentTime: {
       configurable: true,
       get: () => currentTime,
@@ -202,6 +219,25 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
     seek.dispatchEvent(new window.Event("change", { bubbles: true }));
     await waitFor(() => audio.src.includes("start=30.000"), "seek stream URL");
     await waitFor(() => playCount >= 2 && paused === false, "browser playback after seek");
+
+    // The replacement stream starts its local currentTime at zero and exposes
+    // only the remaining media duration. The player timeline must stay absolute.
+    assert.equal(seek.max, "180");
+    currentTime = 5;
+    audio.dispatchEvent(new window.Event("timeupdate"));
+    assert.equal(seek.value, "35");
+    assert.equal(window.document.getElementById("elapsedTime").textContent, "0:35");
+
+    seek.value = "75";
+    seek.dispatchEvent(new window.Event("input", { bubbles: true }));
+    seek.dispatchEvent(new window.Event("change", { bubbles: true }));
+    await waitFor(() => audio.src.includes("start=75.000"), "second seek uses absolute position");
+    await waitFor(() => playCount >= 3 && paused === false, "browser playback after second seek");
+    assert.equal(seek.max, "180");
+    currentTime = 10;
+    audio.dispatchEvent(new window.Event("timeupdate"));
+    assert.equal(seek.value, "85");
+    assert.equal(window.document.getElementById("elapsedTime").textContent, "1:25");
 
     window.document.getElementById("serverOutput").click();
     await waitFor(
