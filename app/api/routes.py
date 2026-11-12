@@ -9,6 +9,7 @@ from app.playback.stream import proxy_audio
 from app.storage.database import delete_credentials, get_credentials
 from app.vk.auth import VKAuthError
 from app.version import VERSION
+from app.vk.stream_cache import StreamUrlCache
 from app.vk.client import (
     list_my_tracks,
     list_playlists,
@@ -20,6 +21,7 @@ from app.vk.client import (
 )
 
 router = APIRouter(prefix="/api/v1")
+_STREAM_URL_CACHE = StreamUrlCache()
 
 
 async def _publish_event(request: Request, event: str, data: dict[str, object]) -> None:
@@ -185,6 +187,9 @@ async def auth_challenge_cancel(challenge_id: str, request: Request) -> dict[str
 async def auth_delete(request: Request) -> dict[str, object]:
     request.app.state.auth_manager.cancel_all()
     await request.app.state.playback_manager.stop()
+    credentials = get_credentials(request.app.state.database_path)
+    if credentials:
+        _STREAM_URL_CACHE.clear_for_token(str(credentials.get("access_token") or ""))
     deleted = delete_credentials(request.app.state.database_path)
     result = {"deleted": deleted, "authenticated": False, "state": "not_configured"}
     await _publish_event(request, "auth.state", result)
@@ -372,7 +377,14 @@ async def track_stream(
         raise HTTPException(status_code=401, detail="Сначала подключите VK")
     try:
         service = make_service(credentials)
-        url = await resolve_stream(service, track_id)
+        url = await _STREAM_URL_CACHE.get_or_resolve(
+            str(credentials["access_token"]),
+            track_id,
+            lambda: resolve_stream(service, track_id),
+            # A start-at-zero request begins a new play action and refreshes the
+            # signed URL. Offset requests reuse it instead of querying VK again.
+            force_refresh=start <= 0.0,
+        )
         return await proxy_audio(
             url, credentials["user_agent"], request.headers.get("range"), start_seconds=start
         )
