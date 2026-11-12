@@ -154,29 +154,74 @@ class ServerPlaybackManager:
         value = max(0.0, min(1.0, float(volume)))
         token = os.environ.get("SUPERVISOR_TOKEN")
         if token:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                headers = {"Authorization": f"Bearer {token}"}
-                info = await client.get("http://supervisor/audio/info", headers=headers)
-                info.raise_for_status()
-                payload = info.json()
-                data = payload.get("data", payload)
-                audio = data.get("audio", {}) if isinstance(data, dict) else {}
-                sinks = audio.get("output", []) if isinstance(audio, dict) else []
-                sink = next((x for x in sinks if isinstance(x, dict) and
-                    (x.get("name") == self._output_device or x.get("default"))), None)
-                if sink and sink.get("index") is not None:
-                    response = await client.post("http://supervisor/audio/volume/output",
-                        headers=headers, json={"index": int(sink["index"]), "volume": value})
-                    response.raise_for_status()
-                    self._volume = value
-                    return {"volume": value}
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    headers = {"Authorization": f"Bearer {token}"}
+                    info = await client.get("http://supervisor/audio/info", headers=headers)
+                    info.raise_for_status()
+                    payload = info.json()
+                    data = payload.get("data", payload) if isinstance(payload, dict) else {}
+                    audio = data.get("audio", {}) if isinstance(data, dict) else {}
+                    sinks = audio.get("output", []) if isinstance(audio, dict) else []
+
+                    # Match an explicitly selected sink first. Only use the
+                    # Supervisor default when the user selected "default".
+                    if self._output_device == "default":
+                        sink = next(
+                            (item for item in sinks if isinstance(item, dict) and item.get("default")),
+                            None,
+                        )
+                    else:
+                        sink = next(
+                            (
+                                item for item in sinks
+                                if isinstance(item, dict) and item.get("name") == self._output_device
+                            ),
+                            None,
+                        )
+
+                    if sink is not None and sink.get("index") is not None:
+                        response = await client.post(
+                            "http://supervisor/audio/volume/output",
+                            headers=headers,
+                            json={"index": int(sink["index"]), "volume": value},
+                        )
+                        response.raise_for_status()
+                        self._volume = value
+                        return {"volume": value}
+            except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError) as exc:
+                # Supervisor can be temporarily unavailable; retain the
+                # PulseAudio fallback instead of returning an unexpected 500.
+                _LOGGER.warning("Could not set volume through Supervisor API: %s", exc)
+
         target = self._output_device if self._output_device != "default" else "@DEFAULT_SINK@"
-        proc = await asyncio.create_subprocess_exec("pactl","set-sink-volume",target,
-            f"{round(value*100)}%",stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE)
-        _, err = await asyncio.wait_for(proc.communicate(),timeout=5.0)
-        if proc.returncode: raise PlaybackError(err.decode("utf-8","replace")[-500:] or "Не удалось изменить громкость")
+        process: asyncio.subprocess.Process | None = None
+        try:
+            process = await asyncio.create_subprocess_exec(
+                "pactl",
+                "set-sink-volume",
+                target,
+                f"{round(value * 100)}%",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await asyncio.wait_for(process.communicate(), timeout=5.0)
+        except FileNotFoundError as exc:
+            raise PlaybackError("Утилита pactl не найдена в контейнере add-on") from exc
+        except asyncio.TimeoutError as exc:
+            if process is not None and process.returncode is None:
+                process.kill()
+                await process.wait()
+            raise PlaybackError("Превышено время ожидания ответа PulseAudio при изменении громкости") from exc
+        except OSError as exc:
+            raise PlaybackError(f"Не удалось изменить громкость через PulseAudio: {exc.strerror}") from exc
+
+        if process.returncode:
+            detail = stderr.decode("utf-8", "replace")[-500:].strip()
+            raise PlaybackError(detail or "Не удалось изменить громкость")
+
         self._volume = value
-        return {"volume":value}
+        return {"volume": value}
 
     def get_state(self) -> dict[str, Any]:
         state = dict(self._state)
