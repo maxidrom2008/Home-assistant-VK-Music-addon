@@ -12,7 +12,9 @@ class PlaybackError(Exception):
     """A server-side playback operation could not be completed."""
 
 
-_LOGGER = logging.getLogger(__name__)\n\nPLAYBACK_STARTUP_GRACE_SECONDS = 1.0
+_LOGGER = logging.getLogger(__name__)
+
+PLAYBACK_STARTUP_GRACE_SECONDS = 1.0
 
 
 class ServerPlaybackManager:
@@ -115,6 +117,8 @@ class ServerPlaybackManager:
             # A process that exits immediately must not be reported as playing.
             await asyncio.sleep(PLAYBACK_STARTUP_GRACE_SECONDS)
             if process.returncode is not None:
+                stderr = await process.stderr.read() if process.stderr is not None else b""
+                _LOGGER.error("Server playback FFmpeg exited (%s): %s", process.returncode, stderr.decode("utf-8", "replace")[-2000:].strip())
                 self._process = None
                 self._position_mark = None
                 self._state = {
@@ -124,7 +128,7 @@ class ServerPlaybackManager:
                     "output": "Home Assistant Audio (PulseAudio)",
                     "error": (
                         "FFmpeg не смог открыть аудиопоток или PulseAudio. "
-                        "Проверьте доступность трека и выбранное устройство вывода."
+                        "Подробности смотрите в журнале add-on."
                     ),
                 }
                 self._position = 0.0
@@ -133,6 +137,9 @@ class ServerPlaybackManager:
 
     async def _watch(self, process: asyncio.subprocess.Process) -> None:
         return_code = await process.wait()
+        stderr = await process.stderr.read() if process.stderr is not None else b""
+        if return_code:
+            _LOGGER.error("Server playback FFmpeg exited (%s): %s", return_code, stderr.decode("utf-8", "replace")[-2000:].strip())
         async with self._lock:
             if self._process is not process:
                 return
@@ -152,8 +159,7 @@ class ServerPlaybackManager:
                     **self._state,
                     "state": "error",
                     "error": (
-                        "FFmpeg завершился с ошибкой. Проверьте выбранное "
-                        "устройство вывода звука в настройках Home Assistant."
+                        "FFmpeg завершился с ошибкой. Подробности смотрите в журнале add-on."
                     ),
                 }
         if self._on_state_change is not None:
