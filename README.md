@@ -1,6 +1,19 @@
 # VK Music Server
 
-Standalone VK Music server for Home Assistant OS. It is independent from Music Assistant and does not modify or replace the existing Music Assistant VK Edition add-on.
+Standalone VK Music server for Home Assistant OS with a companion Home Assistant `media_player` integration. It works independently from Music Assistant and does not modify or replace the legacy Music Assistant VK Edition add-on.
+
+**Current release candidate: `1.0.0-rc.13`.** This is a pre-release. Browser playback, seeking and physical HAOS audio output still require acceptance testing on the target Home Assistant installation; CI/build success alone cannot confirm real VK account behavior or hardware audio.
+
+## Features
+
+- VK account authorization with VK ID browser CAPTCHA, legacy image CAPTCHA and supported two-factor/device-approval challenges.
+- Persistent VK token storage under `/data`; passwords and one-time challenge data are kept in memory only.
+- Personal audio library, playlists, playlist tracks, search and pagination.
+- Browser playback through a server-side stream proxy; temporary VK CDN URLs and playlist access keys are not exposed to the browser.
+- Browser player controls: play, pause, resume, stop, previous/next, volume and a seek timeline. Seeking restarts the proxied stream at the requested offset because the current stream endpoint does not provide byte-range seeking.
+- Optional server-side playback through FFmpeg and the Home Assistant shared PulseAudio service, with output-device selection and diagnostics.
+- Companion Home Assistant `media_player` integration with library/playlist browsing and native media search.
+- Home Assistant Ingress panel; no direct LAN host port is published.
 
 ## Add this app repository to Home Assistant
 
@@ -8,11 +21,37 @@ Add this Git repository in **Settings → Apps → Install app → ⋮ → Repos
 
 `https://github.com/maxidrom2008/Home-assistant-VK-Music-addon`
 
-The repository includes the required root-level `repository.yaml` metadata and the VK Music Server app configuration.
+Then install **VK Music Server** from the Apps store and open its panel. The repository contains the root-level `repository.yaml` metadata. The add-on publishes multi-architecture images for `amd64` and `aarch64` to `ghcr.io/maxidrom2008/vk-music-server` after CI validation.
 
-## 1.0.0-rc.1 — Release candidate
+## Current release notes
 
-This release candidate includes the initial standalone feature set, security hardening, and live playback events. It is intended for final Home Assistant OS validation before the stable 1.0.0 release. Real VK-account authorization and physical audio output must still be confirmed on the target installation.
+See [CHANGELOG.md](CHANGELOG.md) for the release-by-release history. The latest candidate, `1.0.0-rc.13`, removes invalid browser-player DOM references introduced during the timeline rewrite. It is a startup-regression fix, not a claim that seeking has already passed end-to-end testing on real hardware.
+
+## Home Assistant media_player integration
+
+The companion integration requires Home Assistant Core 2025.5.0 or newer (native media-player search support).
+
+The repository includes `custom_components/vk_music_server`.
+
+**Manual installation:** copy `custom_components/vk_music_server` into `/config/custom_components/vk_music_server` on Home Assistant, then restart Home Assistant.
+
+After connecting the VK account in the add-on panel, copy the **internal URL** shown under **Интеграция Home Assistant**. Add the VK Music Server integration from **Settings → Devices & services → Add integration** and paste that URL (for example, `http://<supervisor-hostname>:8099`). The integration creates a `media_player.vk_music_server` entity with playback controls, media browsing for the user's library and playlists, and native Home Assistant media search.
+
+HACS package structure and metadata are included, but the project is not submitted to the default HACS catalog. Automated HACS validation skips the license and repository-topic checks until the repository owner chooses a source license and adds GitHub topics.
+
+The internal URL is not published on a host port. API access is restricted to Home Assistant Core's host-network gateway and the Supervisor/Ingress proxy. The add-on reads its own hostname from `GET /addons/self/info` using the limited Supervisor token.
+
+## Install and configure
+
+1. Add the repository URL above to the Home Assistant Apps store.
+2. Install **VK Music Server** and open its Ingress panel.
+3. Enter the VK phone/email and password.
+4. Complete CAPTCHA or verification if VK requests it.
+5. Select browser playback or HAOS server playback. For server playback, choose an available device in the Audio settings.
+
+Only the final access token and its User-Agent are persisted. Passwords and one-time verification data are held in memory during login. In-memory login sessions expire after ten minutes and are cleared on cancellation, replacement, failure or success.
+
+Use **Отключить VK и удалить сохранённый токен** to remove the token from add-on storage. Deleting it here does not guarantee revocation inside VK; for complete revocation, also use the security/application settings in your VK account.
 
 ## v0.1.2 — VK ID CAPTCHA integration
 
