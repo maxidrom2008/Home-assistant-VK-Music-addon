@@ -2,6 +2,11 @@
 
 All notable project changes are recorded here. Versions are Home Assistant add-on release candidates unless otherwise noted.
 
+## 1.0.0-rc.16
+- Reuse the signed VK stream URL during browser seeks so the server does not repeat `get_songs_by_id_async` for every offset request.
+- Move FFmpeg `-ss` before `-i` to use input-side seeking and avoid decoding the track from the beginning for each seek.
+- Add regression tests for FFmpeg argument ordering, URL-cache reuse, expiry, account isolation and refresh on a new play action.
+
 ## 1.0.0-rc.15
 - Fix browser seek timeline position after replacing the audio stream at a requested offset.
 - Keep the displayed track duration and absolute seek position stable while the replacement stream reports only its remaining duration.

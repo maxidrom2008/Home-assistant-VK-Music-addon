@@ -1,11 +1,11 @@
-# VK Music Server 1.0.0-rc.15 — HAOS acceptance checklist
+# VK Music Server 1.0.0-rc.16 — HAOS acceptance checklist
 
 Run these checks on a real Home Assistant OS installation. Keep the existing Music Assistant VK Edition add-on installed and untouched. This checklist supplements CI; mocked tests do not replace tests with a real VK account and physical audio output.
 
 ## Installation and startup
 
 - [ ] Add the repository `https://github.com/maxidrom2008/Home-assistant-VK-Music-addon` to Home Assistant Apps.
-- [ ] Confirm the installed app version is `1.0.0-rc.15`.
+- [ ] Confirm the installed app version is `1.0.0-rc.16`.
 - [ ] Confirm the app starts and `/health` reports `{"status":"ok"}`.
 - [ ] Confirm the app panel opens through Ingress and no host port is published to the LAN.
 - [ ] Confirm the app Audio settings list the available output devices.
@@ -32,6 +32,7 @@ Run these checks on a real Home Assistant OS installation. Keep the existing Mus
 - [ ] Open a playlist and load its tracks.
 - [ ] Play a track in browser mode; verify audio, pause, resume and track-end behavior.
 - [ ] Seek near the beginning, middle and end of a track; confirm playback resumes at the requested offset.
+- [ ] Seek several times within one track and confirm the server reuses the resolved VK URL instead of logging `Request songs by ids` for every seek.
 - [ ] Switch to server mode and verify browser playback stops.
 - [ ] Switch back to browser mode and verify server playback stops.
 - [ ] Reload the panel during playback and confirm the UI resynchronizes to current server playback state.

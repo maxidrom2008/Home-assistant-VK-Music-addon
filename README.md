@@ -2,7 +2,7 @@
 
 Standalone VK Music server for Home Assistant OS with a companion Home Assistant `media_player` integration. It runs independently of Music Assistant and does not modify or replace the legacy Music Assistant VK Edition add-on.
 
-**Current release candidate: `1.0.0-rc.15`.** This is a pre-release. CI validates the code, browser bundle and multi-architecture images, but real VK authorization, audible output and hardware-specific playback still require acceptance testing on the target Home Assistant installation.
+**Current release candidate: `1.0.0-rc.16`.** This is a pre-release. CI validates the code, browser bundle and multi-architecture images, but real VK authorization, audible output and hardware-specific playback still require acceptance testing on the target Home Assistant installation.
 
 ## Features
 
@@ -10,7 +10,7 @@ Standalone VK Music server for Home Assistant OS with a companion Home Assistant
 - Persistent VK access-token storage under `/data`; passwords and one-time challenge data are held in memory only.
 - Personal audio library, playlists, playlist tracks, text search and pagination.
 - Browser playback through a server-side stream proxy. Temporary VK CDN URLs and private playlist access keys are not sent to the browser.
-- Browser controls: play, pause, resume, stop, previous/next, volume and seek. Seeking restarts the proxied stream at the requested offset because the endpoint does not provide byte-range seeking.
+- Browser controls: play, pause, resume, stop, previous/next, volume and seek. The server reuses the signed VK stream URL while seeking and asks FFmpeg to seek in the source before transcoding, avoiding a fresh VK API lookup and full decode from the beginning for each seek.
 - Optional server-side playback through FFmpeg and the Home Assistant shared PulseAudio service, with output-device selection and diagnostics.
 - Companion Home Assistant `media_player` integration with library/playlist browsing and native media search.
 - Home Assistant Ingress panel without a published LAN host port.
