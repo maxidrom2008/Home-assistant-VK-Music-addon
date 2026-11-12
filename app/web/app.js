@@ -34,6 +34,9 @@ function applyServerPlaybackState(state) {
       : state.state === "error"
         ? (state.error || "Ошибка серверного вывода")
         : "Серверный плеер остановлен";
+  $("serverPause").hidden = state.state !== "playing";
+  $("serverResume").hidden = state.state !== "paused";
+  $("serverStop").hidden = !["playing", "paused"].includes(state.state);
 }
 
 function connectEvents() {
@@ -337,6 +340,9 @@ async function refreshAudioOutputs() {
   try {
     const data = await call("playback/outputs");
     $("outputNotice").textContent = data.notice || "Показаны устройства, доступные аудиослужбе HAOS.";
+    if (data.supervisor_error) {
+      $("outputNotice").textContent += " Не удалось запросить полный список Supervisor; показан резервный список PulseAudio.";
+    }
     if (!data.device_count) {
       $("outputNotice").textContent += " Сейчас аудиослужба не сообщила ни одного физического выхода.";
     } else if (data.default_sink) {

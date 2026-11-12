@@ -6,7 +6,10 @@ import signal
 import time
 import logging
 import json
+import os
 from typing import Any, Awaitable, Callable
+
+import httpx
 
 
 class PlaybackError(Exception):
@@ -43,8 +46,54 @@ class ServerPlaybackManager:
         self._position = 0.0
         self._position_mark: float | None = None
 
+    async def _supervisor_outputs(self) -> tuple[list[dict[str, str]], str | None]:
+        """Read host audio outputs from the Supervisor audio API."""
+        token = os.environ.get("SUPERVISOR_TOKEN")
+        if not token:
+            return [], None
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(
+                "http://supervisor/audio/info",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            response.raise_for_status()
+            payload = response.json()
+        data = payload.get("data", payload)
+        audio = data.get("audio", {}) if isinstance(data, dict) else {}
+        raw_outputs = audio.get("output", []) if isinstance(audio, dict) else []
+        outputs = [
+            {
+                "id": str(item.get("name") or ""),
+                "name": str(item.get("description") or item.get("name") or "Аудиоустройство"),
+            }
+            for item in raw_outputs
+            if isinstance(item, dict) and item.get("name")
+        ]
+        default_sink = next(
+            (str(item.get("name")) for item in raw_outputs if isinstance(item, dict) and item.get("default") and item.get("name")),
+            None,
+        )
+        return outputs, default_sink
+
     async def list_outputs(self) -> dict[str, Any]:
-        """List available PulseAudio sinks exposed by Home Assistant."""
+        """List output devices from Supervisor, falling back to PulseAudio sinks."""
+        supervisor_error = None
+        try:
+            outputs, default_sink = await self._supervisor_outputs()
+            if outputs:
+                return {
+                    "outputs": [{"id": "default", "name": "По умолчанию"}, *outputs],
+                    "selected": self._output_device,
+                    "default_sink": default_sink,
+                    "device_count": len(outputs),
+                    "notice": (
+                        "Список получен у аудиослужбы Home Assistant. "
+                        "Bluetooth-колонка появится здесь после сопряжения и подключения как аудиовыход A2DP."
+                    ),
+                }
+        except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
+            supervisor_error = str(exc)
+            _LOGGER.warning("Could not read Supervisor audio outputs: %s", exc)
         try:
             process = await asyncio.create_subprocess_exec(
                 "pactl", "-f", "json", "list", "sinks",
@@ -78,10 +127,10 @@ class ServerPlaybackManager:
             "default_sink": default_sink,
             "device_count": len(outputs),
             "notice": (
-                "Показаны только устройства, доступные аудиослужбе Home Assistant. "
-                "Bluetooth-колонки и телевизоры, подключённые только в интеграции Bluetooth/медиа, "
-                "здесь не появятся автоматически."
+                "Показаны только устройства, доступные PulseAudio add-on. "
+                "Для Bluetooth-колонки требуется подключение как A2DP-аудиовыход в HAOS."
             ),
+            "supervisor_error": supervisor_error,
         }
 
     async def select_output(self, device: str) -> dict[str, Any]:
@@ -140,12 +189,13 @@ class ServerPlaybackManager:
                 "s16",
                 "-f",
                 "pulse",
-                "-device",
-                self._output_device,
                 "-name",
                 "VK Music Server",
                 "default",
             ]
+            if self._output_device != "default":
+                output_index = command.index("-name")
+                command[output_index:output_index] = ["-device", self._output_device]
             try:
                 diagnostics = await self._pulse_diagnostics()
                 _LOGGER.info("PulseAudio output diagnostics before playback:\n%s", diagnostics)
