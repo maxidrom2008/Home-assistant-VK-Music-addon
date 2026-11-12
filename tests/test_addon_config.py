@@ -83,8 +83,8 @@ def test_ci_metadata_normalization_is_safe_for_untrusted_pull_request_values(tmp
         {
             "IMAGE": "ghcr.io/maxidrom2008/vk-music-server",
             "VERSION": "1.0.0-rc.13",
-            "APP_NAME": f"VK Music\\nInjected=1 $(touch {marker})",
-            "APP_DESCRIPTION": "Server\\r\\nInjected=2",
+            "APP_NAME": f"VK Music\nInjected=1 $(touch {marker})",
+            "APP_DESCRIPTION": "Server\r\nInjected=2",
             "APP_URL": "https://github.com/maxidrom2008/Home-assistant-VK-Music-addon",
             "GITHUB_OUTPUT": str(output),
         }
