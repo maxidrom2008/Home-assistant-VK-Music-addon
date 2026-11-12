@@ -51,6 +51,10 @@ class ServerPlaybackRequest(BaseModel):
     track_id: str = Field(pattern=r"^-?[0-9]+_-?[0-9]+$", max_length=64)
 
 
+class PlaybackOutputRequest(BaseModel):
+    device: str = Field(min_length=1, max_length=512)
+
+
 @router.get("/integration/info")
 async def integration_info(request: Request) -> dict[str, object]:
     """Return the private hostname needed by the companion HA integration."""
@@ -267,6 +271,25 @@ async def search(
         "query": q, "items": items, "limit": limit, "offset": offset,
         "available": True, "has_more": len(items) == limit,
     }
+
+
+@router.get("/playback/outputs")
+async def playback_outputs(request: Request) -> dict[str, object]:
+    try:
+        return await request.app.state.playback_manager.list_outputs()
+    except PlaybackError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.post("/playback/output")
+async def playback_select_output(
+    payload: PlaybackOutputRequest,
+    request: Request,
+) -> dict[str, object]:
+    try:
+        return await request.app.state.playback_manager.select_output(payload.device)
+    except PlaybackError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/playback/state")

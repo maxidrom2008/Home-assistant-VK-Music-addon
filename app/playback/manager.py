@@ -5,6 +5,7 @@ import asyncio
 import signal
 import time
 import logging
+import json
 from typing import Any, Awaitable, Callable
 
 
@@ -34,11 +35,49 @@ class ServerPlaybackManager:
             "state": "idle",
             "mode": "server",
             "track": None,
-            "output": "Home Assistant Audio (PulseAudio)",
+            "output": self._output_label,
             "error": None,
         }
         self._position = 0.0
         self._position_mark: float | None = None
+        self._output_device = "default"
+        self._output_label = "По умолчанию"
+
+    async def list_outputs(self) -> dict[str, Any]:
+        """List available PulseAudio sinks exposed by Home Assistant."""
+        try:
+            process = await asyncio.create_subprocess_exec(
+                "pactl", "-f", "json", "list", "sinks",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=5.0)
+            if process.returncode != 0:
+                raise PlaybackError(stderr.decode("utf-8", "replace")[-1000:].strip() or "pactl не смог получить список устройств")
+            sinks = json.loads(stdout.decode("utf-8", "replace"))
+            outputs = [
+                {"id": str(sink.get("name") or ""), "name": str(sink.get("description") or sink.get("name") or "Аудиоустройство")}
+                for sink in sinks if isinstance(sink, dict) and sink.get("name")
+            ]
+        except FileNotFoundError:
+            raise PlaybackError("Утилита pactl не найдена в контейнере add-on")
+        except (asyncio.TimeoutError, json.JSONDecodeError) as exc:
+            raise PlaybackError("Не удалось прочитать список аудиоустройств PulseAudio") from exc
+        except OSError as exc:
+            raise PlaybackError(f"Не удалось запросить PulseAudio: {exc.strerror}") from exc
+        return {
+            "outputs": [{"id": "default", "name": "По умолчанию"}, *outputs],
+            "selected": self._output_device,
+        }
+
+    async def select_output(self, device: str) -> dict[str, Any]:
+        available = await self.list_outputs()
+        choices = {item["id"]: item["name"] for item in available["outputs"]}
+        if device not in choices:
+            raise PlaybackError("Выбранное аудиоустройство больше недоступно. Обновите список.")
+        self._output_device = device
+        self._output_label = choices[device]
+        return {"selected": device, "name": self._output_label}
 
     def get_state(self) -> dict[str, Any]:
         state = dict(self._state)
@@ -81,6 +120,8 @@ class ServerPlaybackManager:
                 "-dn",
                 "-f",
                 "pulse",
+                "-device",
+                self._output_device,
                 "-name",
                 "VK Music Server",
                 "default",
@@ -109,7 +150,7 @@ class ServerPlaybackManager:
                     "artist": str(track.get("artist") or ""),
                     "duration": int(track.get("duration") or 0),
                 },
-                "output": "Home Assistant Audio (PulseAudio)",
+                "output": self._output_label,
                 "error": None,
             }
             self._monitor_task = asyncio.create_task(self._watch(process))

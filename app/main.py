@@ -73,7 +73,10 @@ app.include_router(websocket_router)
 
 @app.get("/")
 async def root():
-    return FileResponse(WEB_ROOT / "index.html")
+    return FileResponse(
+        WEB_ROOT / "index.html",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", "Pragma": "no-cache"},
+    )
 
 
 @app.get("/app.js")
@@ -82,7 +85,7 @@ async def web_app_script():
     return FileResponse(
         bundle if bundle.is_file() else WEB_ROOT / "app.js",
         media_type="text/javascript; charset=utf-8",
-        headers={"cache-control": "no-cache"},
+        headers={"cache-control": "no-store, no-cache, must-revalidate, max-age=0", "pragma": "no-cache"},
     )
 
 

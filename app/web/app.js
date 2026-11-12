@@ -298,6 +298,37 @@ async function playTrack(index) {
     $("libraryMessage").textContent = "Не удалось начать воспроизведение: " + (err.message || String(err));
   }
 }
+async function refreshAudioOutputs() {
+  const select = $("audioOutput");
+  const previous = select.value;
+  try {
+    const data = await call("playback/outputs");
+    select.replaceChildren();
+    for (const output of data.outputs || []) {
+      const option = document.createElement("option");
+      option.value = output.id;
+      option.textContent = output.name;
+      select.append(option);
+    }
+    select.value = data.selected || previous || "default";
+    if (!select.value) select.value = "default";
+    select.disabled = false;
+  } catch (err) {
+    select.disabled = true;
+    $("outputStatus").textContent = "Не удалось получить устройства HAOS: " + err.message;
+  }
+}
+async function setAudioOutput(device) {
+  try {
+    const selected = await call("playback/output", {
+      method:"POST", body:JSON.stringify({device})
+    });
+    $("outputStatus").textContent = "Выход HAOS: " + selected.name + ". Применится к следующему запуску трека.";
+  } catch (err) {
+    $("outputStatus").textContent = err.message;
+    await refreshAudioOutputs();
+  }
+}
 async function setOutputMode(mode) {
   outputMode = mode;
   $("browserOutput").className = mode === "browser" ? "" : "secondary";
@@ -308,6 +339,7 @@ async function setOutputMode(mode) {
   $("serverStop").hidden = mode !== "server";
   if (mode === "server") {
     $("audio").pause();
+    await refreshAudioOutputs();
     $("outputStatus").textContent = "Следующий выбранный трек будет играть через аудиовыход HAOS.";
     try {
       const state = await call("playback/state");
@@ -523,6 +555,8 @@ $("serverOutput").addEventListener("click", () => setOutputMode("server"));
 $("serverPause").addEventListener("click", () => serverPlaybackAction("pause"));
 $("serverResume").addEventListener("click", () => serverPlaybackAction("resume"));
 $("serverStop").addEventListener("click", () => serverPlaybackAction("stop"));
+$("audioOutput").addEventListener("change", event => setAudioOutput(event.target.value));
+$("refreshOutputs").addEventListener("click", refreshAudioOutputs);
 $("audio").addEventListener("ended", playNext);
 $("audio").addEventListener("error", () => {
   if ($("audio").src) $("libraryMessage").textContent = "VK не смог предоставить поток этого трека. Попробуйте другой трек или повторите позже.";

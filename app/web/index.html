@@ -2,13 +2,11 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <title>VK Music — настройки</title>
 <style>
-:root{color-scheme:dark;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#111827;color:#eef2ff}
-body{margin:0;padding:28px 16px}.wrap{max-width:680px;margin:0 auto}
-.panel{background:#1f2937;border:1px solid #374151;border-radius:16px;padding:24px}
-h1{font-size:25px;margin:0 0 8px}.muted{color:#9ca3af;line-height:1.5}
+:root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;background:#0b1020;color:#edf2ff;--surface:#151d31;--line:#2a3650;--muted:#9aa8c2;--accent:#7c8cff;--accent2:#5368e8}\nbody{margin:0;padding:22px 16px 48px;background:radial-gradient(ellipse at 50% -20%,#25345c 0,transparent 55%),#0b1020}.wrap{max-width:820px;margin:0 auto}\n.panel{background:rgba(18,27,46,.94);border:1px solid var(--line);border-radius:22px;padding:24px;box-shadow:0 24px 70px #03071266}
+h1{font-size:25px;margin:0 0 8px}.muted{color:var(--muted);line-height:1.5}
 .status{margin:18px 0;padding:12px 14px;border-radius:10px;background:#111827;border:1px solid #374151}
 label{display:block;margin:16px 0 6px;font-weight:600}
 input{box-sizing:border-box;width:100%;border:1px solid #4b5563;border-radius:9px;background:#111827;color:#fff;padding:12px;font-size:16px}
@@ -33,7 +31,7 @@ small{display:block;color:#9ca3af;margin-top:10px}
 #nowPlaying{font-weight:650;margin-bottom:10px}
 #audio{width:100%;margin-top:10px}
 #loadMore{display:none;width:100%}
-@media(max-width:480px){body{padding:14px 10px}.panel{padding:16px}.trackRow{gap:8px}.trackRow button{padding:8px}}
+@media(max-width:560px){body{padding:10px 8px 32px}.panel{padding:15px;border-radius:17px}#player{top:4px;padding:13px;border-radius:16px}.trackRow{gap:8px}.trackRow button{padding:8px}.outputPicker{align-items:stretch}.outputPicker select{flex:1;min-width:0}.outputPicker button{margin:0}}
 </style>
 </head>
 <body><main class="wrap"><section class="panel">
@@ -60,6 +58,7 @@ small{display:block;color:#9ca3af;margin-top:10px}
     <button id="browserOutput" type="button">Вывод в браузер</button>
     <button id="serverOutput" type="button" class="secondary">Вывод через HAOS</button>
   </div>
+  <div class="outputPicker"><label for="audioOutput">Устройство вывода HAOS</label><select id="audioOutput"><option value="default">По умолчанию</option></select><button id="refreshOutputs" class="secondary" type="button">Обновить</button></div>
   <div class="playerButtons">
     <button id="previousTrack" type="button" class="secondary" aria-label="Предыдущий трек">Назад</button>
     <button id="nextTrack" type="button" class="secondary" aria-label="Следующий трек">Далее</button>
