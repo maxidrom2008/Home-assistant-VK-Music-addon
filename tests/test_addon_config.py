@@ -99,3 +99,22 @@ def test_ci_metadata_normalization_is_safe_for_untrusted_pull_request_values(tmp
     assert "name=VK Music Injected=1 $(touch " + str(marker) + ")" in lines
     assert "description=Server  Injected=2" in lines
     assert "url=https://github.com/maxidrom2008/Home-assistant-VK-Music-addon" in lines
+
+
+def test_direct_runtime_dependencies_are_exactly_pinned() -> None:
+    from pathlib import Path
+
+    requirements = [
+        line.strip()
+        for line in Path("requirements.txt").read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    assert requirements
+    assert all("==" in requirement and ">=" not in requirement and "<" not in requirement for requirement in requirements)
+
+    package = json.loads(
+        Path("app/web/package.json").read_text(encoding="utf-8")
+    )
+    for dependency in (*package.get("dependencies", {}).values(), *package.get("devDependencies", {}).values()):
+        assert dependency and dependency[0].isdigit()
+        assert not dependency.startswith(("^", "~", "*"))
