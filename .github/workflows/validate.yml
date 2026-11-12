@@ -35,6 +35,8 @@ jobs:
         run: |
           node --check app/web/app.js
           node --check app/web/app.bundle.js
+      - name: Run browser DOM tests
+        run: node --test tests/web_player.test.mjs
       - name: Run tests
         env:
           VKMS_DATA_DIR: ${{ runner.temp }}/vkms-test-data
