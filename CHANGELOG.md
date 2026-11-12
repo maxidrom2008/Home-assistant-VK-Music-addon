@@ -2,6 +2,15 @@
 
 All notable project changes are recorded here. Versions are Home Assistant add-on release candidates unless otherwise noted.
 
+## 1.0.0-rc.14
+- Harden CI metadata handling against shell injection and workflow-output newline injection; pin GitHub Actions to immutable revisions and disable persisted checkout credentials.
+- Keep pull-request validation builds read-only and build the supported `amd64` and `aarch64` images without registry credentials.
+- Improve server playback volume targeting and add a PulseAudio fallback with controlled errors when the Supervisor audio API is unavailable.
+- Retry Home Assistant integration setup when the VK Music Server API is temporarily unavailable.
+- Synchronize the current playback snapshot with newly connected and reconnected browser clients.
+- Add production-bundle browser interaction tests and lock Python runtime dependencies to exact versions.
+- Real VK authorization and physical HAOS audio playback still require acceptance testing before a stable `1.0.0` release.
+
 ## 1.0.0-rc.13
 - Fix browser playback startup after the timeline/seek-slider rewrite by removing references to a timeline progress element that is not present in the player HTML.
 - Keep the rewritten timeline renderer independent of the removed duplicate progress bar.
