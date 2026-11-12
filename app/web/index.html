@@ -79,6 +79,7 @@ small{display:block;color:var(--muted);margin-top:10px}
   </div>
   <div class="outputPicker"><label for="audioOutput">Устройство вывода HAOS</label><select id="audioOutput"><option value="default">По умолчанию</option></select><button id="refreshOutputs" class="secondary" type="button">Обновить</button></div>
   <small id="outputNotice">Доступны только устройства, опубликованные аудиослужбой Home Assistant.</small>
+  <div class="playerButtons" id="browserControls"><button id="browserPause" type="button" class="secondary" hidden>Пауза</button><button id="browserResume" type="button" class="secondary" hidden>Продолжить</button><button id="browserStop" type="button" class="danger" hidden>Стоп</button></div>
   <div class="playerButtons">
     <button id="previousTrack" type="button" class="secondary" aria-label="Предыдущий трек">Назад</button>
     <button id="nextTrack" type="button" class="secondary" aria-label="Следующий трек">Далее</button>
@@ -89,10 +90,12 @@ small{display:block;color:var(--muted);margin-top:10px}
   <p id="outputStatus" class="muted">Воспроизведение в этом браузере</p>
   <div id="browserTimeline" aria-label="Время воспроизведения">
     <div class="timelineTimes"><span id="elapsedTime">0:00</span><span id="totalTime">0:00</span></div>
+    <input id="timelineSeek" type="range" min="0" max="0" step="1" value="0" aria-label="Перемотка трека" disabled>
     <div class="timelineRail" role="progressbar" aria-label="Прогресс трека" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="timelineRail">
       <div id="timelineProgress"></div>
     </div>
   </div>
+  <div style="display:flex;align-items:center;gap:10px;margin-top:10px"><label for="volumeControl">Громкость</label><input id="volumeControl" type="range" min="0" max="100" value="80" style="width:130px"><output id="volumeValue">80%</output></div>
   <audio id="audio" preload="none"></audio>
 </div>
 <h2>Музыка</h2>

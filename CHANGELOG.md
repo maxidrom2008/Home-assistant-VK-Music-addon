@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.0-rc.8
+- Restore browser pause, resume and stop controls and add a functional seek slider.
+- Add volume control for browser and HAOS playback.
+- Hide PulseAudio dummy sinks from selectable outputs.
+
+
 ## 1.0.0-rc.1
 - Prepare the first 1.x release candidate.
 - Harden SQLite database, WAL and SHM file permissions for persisted VK credentials.

@@ -45,6 +45,7 @@ class ServerPlaybackManager:
         }
         self._position = 0.0
         self._position_mark: float | None = None
+        self._volume = 0.8
 
     async def _supervisor_outputs(self) -> tuple[list[dict[str, str]], str | None]:
         """Read host audio outputs from the Supervisor audio API."""
@@ -68,6 +69,9 @@ class ServerPlaybackManager:
             }
             for item in raw_outputs
             if isinstance(item, dict) and item.get("name")
+            and "dummy" not in str(item.get("name", "")).lower()
+            and "dummy" not in str(item.get("description", "")).lower()
+            and str(item.get("name", "")).lower() != "auto_null"
         ]
         default_sink = next(
             (str(item.get("name")) for item in raw_outputs if isinstance(item, dict) and item.get("default") and item.get("name")),
@@ -107,6 +111,9 @@ class ServerPlaybackManager:
             outputs = [
                 {"id": str(sink.get("name") or ""), "name": str(sink.get("description") or sink.get("name") or "Аудиоустройство")}
                 for sink in sinks if isinstance(sink, dict) and sink.get("name")
+                and "dummy" not in str(sink.get("name", "")).lower()
+                and "dummy" not in str(sink.get("description", "")).lower()
+                and str(sink.get("name", "")).lower() != "auto_null"
             ]
             default_process = await asyncio.create_subprocess_exec(
                 "pactl", "get-default-sink",
@@ -141,6 +148,35 @@ class ServerPlaybackManager:
         self._output_device = device
         self._output_label = choices[device]
         return {"selected": device, "name": self._output_label}
+
+    async def set_volume(self, volume: float) -> dict[str, Any]:
+        """Set the selected HAOS audio output volume."""
+        value = max(0.0, min(1.0, float(volume)))
+        token = os.environ.get("SUPERVISOR_TOKEN")
+        if token:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                headers = {"Authorization": f"Bearer {token}"}
+                info = await client.get("http://supervisor/audio/info", headers=headers)
+                info.raise_for_status()
+                payload = info.json()
+                data = payload.get("data", payload)
+                audio = data.get("audio", {}) if isinstance(data, dict) else {}
+                sinks = audio.get("output", []) if isinstance(audio, dict) else []
+                sink = next((x for x in sinks if isinstance(x, dict) and
+                    (x.get("name") == self._output_device or x.get("default"))), None)
+                if sink and sink.get("index") is not None:
+                    response = await client.post("http://supervisor/audio/volume/output",
+                        headers=headers, json={"index": int(sink["index"]), "volume": value})
+                    response.raise_for_status()
+                    self._volume = value
+                    return {"volume": value}
+        target = self._output_device if self._output_device != "default" else "@DEFAULT_SINK@"
+        proc = await asyncio.create_subprocess_exec("pactl","set-sink-volume",target,
+            f"{round(value*100)}%",stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE)
+        _, err = await asyncio.wait_for(proc.communicate(),timeout=5.0)
+        if proc.returncode: raise PlaybackError(err.decode("utf-8","replace")[-500:] or "Не удалось изменить громкость")
+        self._volume = value
+        return {"volume":value}
 
     def get_state(self) -> dict[str, Any]:
         state = dict(self._state)
@@ -187,6 +223,8 @@ class ServerPlaybackManager:
                 "48000",
                 "-sample_fmt",
                 "s16",
+                "-af",
+                f"volume={self._volume}",
                 "-f",
                 "pulse",
                 "-name",

@@ -55,6 +55,10 @@ class PlaybackOutputRequest(BaseModel):
     device: str = Field(min_length=1, max_length=512)
 
 
+class PlaybackVolumeRequest(BaseModel):
+    volume: float = Field(ge=0.0, le=1.0)
+
+
 @router.get("/integration/info")
 async def integration_info(request: Request) -> dict[str, object]:
     """Return the private hostname needed by the companion HA integration."""
@@ -290,6 +294,12 @@ async def playback_select_output(
         return await request.app.state.playback_manager.select_output(payload.device)
     except PlaybackError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/playback/volume")
+async def playback_set_volume(payload: PlaybackVolumeRequest, request: Request) -> dict[str, object]:
+    try: return await request.app.state.playback_manager.set_volume(payload.volume)
+    except PlaybackError as exc: raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.get("/playback/state")
