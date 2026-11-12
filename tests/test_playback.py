@@ -159,6 +159,9 @@ def test_set_volume_targets_the_selected_sink_or_the_default(monkeypatch: pytest
             return self.payload
 
     class FakeSupervisorClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
         async def __aenter__(self):
             return self
 
@@ -209,6 +212,9 @@ def test_set_volume_falls_back_to_pactl_when_supervisor_is_unavailable(
     captured: list[tuple[object, ...]] = []
 
     class UnavailableSupervisorClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
         async def __aenter__(self):
             return self
 
