@@ -89,7 +89,7 @@ jobs:
           raw_url="$(decode_metadata "${APP_URL:-null}")"
 
           # Validate values that later become image references and tags.
-          if [[ ! "$image" =~ ^ghcr\\.io/[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$ ]]; then
+          if [[ ! "$image" =~ ^ghcr\.io/[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$ ]]; then
             echo "Invalid container image reference in app metadata" >&2
             exit 1
           fi
@@ -102,8 +102,8 @@ jobs:
           # so a pull request cannot inject additional workflow outputs.
           single_line() {
             local value="$1"
-            value="${value//$'\\r'/ }"
-            value="${value//$'\\n'/ }"
+            value="${value//$'\r'/ }"
+            value="${value//$'\n'/ }"
             printf '%s' "$value"
           }
 
@@ -123,13 +123,13 @@ jobs:
           fi
 
           {
-            printf 'image_name=%s\\n' "$image_name"
-            printf 'registry_prefix=%s\\n' "$registry_prefix"
-            printf 'version=%s\\n' "$version"
-            printf 'name=%s\\n' "$app_name"
-            printf 'description=%s\\n' "$app_description"
+            printf 'image_name=%s\n' "$image_name"
+            printf 'registry_prefix=%s\n' "$registry_prefix"
+            printf 'version=%s\n' "$version"
+            printf 'name=%s\n' "$app_name"
+            printf 'description=%s\n' "$app_description"
             if [[ -n "$app_url" ]]; then
-              printf 'url=%s\\n' "$app_url"
+              printf 'url=%s\n' "$app_url"
             fi
           } >> "$GITHUB_OUTPUT"
       - name: Prepare architecture matrix
