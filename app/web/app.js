@@ -160,9 +160,11 @@ function renderBrowserTimeline() {
   const elapsed = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
   const duration = browserTrackDuration;
   const percent = duration > 0 ? Math.min(100, Math.max(0, elapsed / duration * 100)) : 0;
-  $("elapsedTime").textContent = formatDuration(elapsed);
+  if (!timelineSeeking) {
+    $("elapsedTime").textContent = formatDuration(elapsed);
+    $("timelineSeek").value = String(Math.round(elapsed));
+  }
   $("totalTime").textContent = formatDuration(duration);
-  if (!timelineSeeking) $("timelineSeek").value = String(Math.round(elapsed));
   $("timelineRail").setAttribute("aria-valuenow", String(Math.round(percent)));
   if (!audio.paused && !audio.ended && outputMode === "browser") {
     timelineFrame = requestAnimationFrame(renderBrowserTimeline);
