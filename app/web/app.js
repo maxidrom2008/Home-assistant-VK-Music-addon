@@ -159,13 +159,11 @@ function renderBrowserTimeline() {
   const audio = $("audio");
   const elapsed = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
   const duration = browserTrackDuration;
-  const percent = duration > 0 ? Math.min(100, Math.max(0, elapsed / duration * 100)) : 0;
   if (!timelineSeeking) {
     $("elapsedTime").textContent = formatDuration(elapsed);
     $("timelineSeek").value = String(Math.round(elapsed));
   }
   $("totalTime").textContent = formatDuration(duration);
-  $("timelineRail").setAttribute("aria-valuenow", String(Math.round(percent)));
   if (!audio.paused && !audio.ended && outputMode === "browser") {
     timelineFrame = requestAnimationFrame(renderBrowserTimeline);
   } else {
@@ -177,8 +175,13 @@ function startBrowserTimeline(duration) {
   $("browserTimeline").hidden = false;
   $("elapsedTime").textContent = "0:00";
   $("totalTime").textContent = formatDuration(browserTrackDuration);
+  const seek = $("timelineSeek");
+  seek.max = String(Math.max(0, Math.ceil(browserTrackDuration)));
+  seek.disabled = !(browserTrackDuration > 0);
+  seek.value = "0";
   if (timelineFrame) cancelAnimationFrame(timelineFrame);
-  timelineFrame = requestAnimationFrame(renderBrowserTimeline);
+  timelineFrame = 0;
+  renderBrowserTimeline();
 }
 function stopBrowserTimeline() {
   if (timelineFrame) cancelAnimationFrame(timelineFrame);
@@ -611,7 +614,8 @@ $("serverStop").addEventListener("click", () => serverPlaybackAction("stop"));
 $("browserPause").addEventListener("click", () => $("audio").pause());
 $("browserResume").addEventListener("click", async () => { try { await $("audio").play(); } catch(e) { $("libraryMessage").textContent=e.message; } });
 $("browserStop").addEventListener("click", () => { const a=$("audio"); a.pause(); a.currentTime=0; a.removeAttribute("src"); a.load(); $("browserPause").hidden=true; $("browserResume").hidden=true; $("browserStop").hidden=true; renderBrowserTimeline(); });
-$("timelineSeek").addEventListener("pointerdown",()=>timelineSeeking=true);
+$("timelineSeek").addEventListener("pointerdown",()=>{timelineSeeking=true;});
+$("timelineSeek").addEventListener("input", e => { timelineSeeking=true; $("elapsedTime").textContent=formatDuration(Number(e.target.value)); });
 $("timelineSeek").addEventListener("change", async e => {
   const seconds = Math.max(0, Math.min(browserTrackDuration, Number(e.target.value) || 0));
   timelineSeeking = false;
@@ -632,6 +636,8 @@ $("volumeControl").addEventListener("input",async e=>{playbackVolume=Math.max(0,
 $("audioOutput").addEventListener("change", event => setAudioOutput(event.target.value));
 $("refreshOutputs").addEventListener("click", refreshAudioOutputs);
 $("audio").addEventListener("play",()=>{$("browserPause").hidden=false;$("browserResume").hidden=true;$("browserStop").hidden=false;if(!timelineFrame&&outputMode==="browser")timelineFrame=requestAnimationFrame(renderBrowserTimeline);});
+$("audio").addEventListener("timeupdate",()=>{if(outputMode==="browser"&&!timelineSeeking)renderBrowserTimeline();});
+$("audio").addEventListener("loadedmetadata",()=>{const d=$("audio").duration;if(outputMode==="browser"&&Number.isFinite(d)&&d>0){browserTrackDuration=d;$("timelineSeek").max=String(Math.ceil(d));$("timelineSeek").disabled=false;$("totalTime").textContent=formatDuration(d);renderBrowserTimeline();}});
 $("audio").addEventListener("pause",()=>{if(timelineFrame)cancelAnimationFrame(timelineFrame);timelineFrame=0;if(outputMode==="browser"){$("browserPause").hidden=true;$("browserResume").hidden=!$("audio").src||$("audio").ended;$("browserStop").hidden=!$("audio").src;renderBrowserTimeline();}});
 $("audio").addEventListener("ended", () => {
   stopBrowserTimeline();
