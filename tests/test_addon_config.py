@@ -142,3 +142,37 @@ def test_github_actions_are_pinned_to_full_commit_shas() -> None:
             assert len(revision) == 40 and all(
                 char in "0123456789abcdef" for char in revision
             ), f"Action is not pinned to an immutable commit SHA: {action_ref}"
+
+
+def test_pull_request_builds_do_not_receive_publish_credentials() -> None:
+    from pathlib import Path
+
+    workflow = yaml.safe_load(
+        Path(".github/workflows/validate.yml").read_text(encoding="utf-8")
+    )
+    publish_build = workflow["jobs"]["build"]
+    assert publish_build["if"] == "github.event_name == 'push' && github.ref == 'refs/heads/main'"
+    assert publish_build["permissions"]["packages"] == "write"
+    assert publish_build["permissions"]["id-token"] == "write"
+
+    pull_request_build = workflow["jobs"]["build_validate"]
+    assert pull_request_build["if"] == "github.event_name == 'pull_request'"
+    assert pull_request_build["permissions"] == {"contents": "read"}
+    assert all(
+        "container-registry-password" not in str(step.get("with", {}))
+        for step in pull_request_build["steps"]
+    )
+
+
+def test_checkout_steps_do_not_persist_github_tokens() -> None:
+    from pathlib import Path
+
+    for workflow_path in (
+        Path(".github/workflows/validate.yml"),
+        Path(".github/workflows/hassfest.yml"),
+    ):
+        workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+        for job in workflow["jobs"].values():
+            for step in job.get("steps", []):
+                if str(step.get("uses", "")).startswith("actions/checkout@"):
+                    assert step.get("with", {}).get("persist-credentials") is False
