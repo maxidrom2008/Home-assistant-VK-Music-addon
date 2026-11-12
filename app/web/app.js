@@ -168,7 +168,6 @@ function renderBrowserTimeline() {
     $("elapsedTime").textContent = formatDuration(elapsed);
   }
   $("totalTime").textContent = formatDuration(duration);
-  $("timelineProgress").style.width = (duration > 0 ? Math.min(100, elapsed / duration * 100) : 0).toFixed(2) + "%";
 }
 function startBrowserTimeline(duration) {
   browserTrackDuration = Math.max(0, Number(duration) || 0);
@@ -676,7 +675,6 @@ $("timelineSeek").addEventListener("input", event => {
   timelineSeeking = true;
   const value = Number(event.target.value) || 0;
   $("elapsedTime").textContent = formatDuration(value);
-  $("timelineProgress").style.width = (browserTrackDuration > 0 ? value / browserTrackDuration * 100 : 0) + "%";
 });
 $("timelineSeek").addEventListener("change", event => {
   if (outputMode !== "browser" || !currentBrowserTrackId) return;
