@@ -112,7 +112,7 @@ The API is restricted to Home Assistant Core, Supervisor/Ingress and loopback. O
 ```bash
 python -m venv .venv
 . .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 pip install pytest
 
 cd app/web
