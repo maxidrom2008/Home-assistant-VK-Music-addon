@@ -625,10 +625,29 @@ $("timelineSeek").addEventListener("change", async e => {
   if (outputMode !== "browser" || !currentBrowserTrackId) return;
   const audio = $("audio");
   const wasPlaying = !audio.paused;
+  // Stop the previous stream before replacing its source. Calling play()
+  // immediately after assigning src races with the browser's load algorithm.
+  audio.pause();
   audio.src = api("tracks/" + encodeURIComponent(currentBrowserTrackId) + "/stream?start=" + seconds.toFixed(1));
+  audio.load();
   try {
-    if (wasPlaying) await audio.play();
-    else audio.load();
+    if (wasPlaying) {
+      await new Promise((resolve, reject) => {
+        if (audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+          resolve();
+          return;
+        }
+        const onReady = () => { cleanup(); resolve(); };
+        const onError = () => { cleanup(); reject(new Error(audio.error?.message || "Поток не загрузился")); };
+        const cleanup = () => {
+          audio.removeEventListener("canplay", onReady);
+          audio.removeEventListener("error", onError);
+        };
+        audio.addEventListener("canplay", onReady, { once: true });
+        audio.addEventListener("error", onError, { once: true });
+      });
+      await audio.play();
+    }
   } catch (err) {
     $("libraryMessage").textContent = "Не удалось перемотать трек: " + err.message;
   }
