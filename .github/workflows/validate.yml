@@ -64,20 +64,64 @@ jobs:
           path: "."
       - name: Normalize app metadata
         id: normalize
+        env:
+          # Step outputs are untrusted input on pull_request workflows.
+          # Keep them in the environment; never interpolate them into shell source.
+          IMAGE: ${{ steps.info.outputs.image }}
+          VERSION: ${{ steps.info.outputs.version }}
+          APP_NAME: ${{ steps.info.outputs.name }}
+          APP_DESCRIPTION: ${{ steps.info.outputs.description }}
+          APP_URL: ${{ steps.info.outputs.url }}
         run: |
-          image=${{ steps.info.outputs.image }}
-          echo "image_name=${image##*/}" >> "$GITHUB_OUTPUT"
-          echo "registry_prefix=${image%/*}" >> "$GITHUB_OUTPUT"
-          version=${{ steps.info.outputs.version }}
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
-          name=${{ steps.info.outputs.name }}
-          echo "name=${name}" >> "$GITHUB_OUTPUT"
-          description=${{ steps.info.outputs.description }}
-          echo "description=${description}" >> "$GITHUB_OUTPUT"
-          url=${{ steps.info.outputs.url }}
-          if [[ -n "$url" && "$url" != "null" ]]; then
-            echo "url=${url}" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+
+          image="${IMAGE:?Home Assistant metadata did not provide an image}"
+          version="${VERSION:?Home Assistant metadata did not provide a version}"
+
+          # Validate values that later become image references and tags.
+          if [[ ! "$image" =~ ^ghcr\\.io/[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$ ]]; then
+            echo "Invalid container image reference in app metadata" >&2
+            exit 1
           fi
+          if [[ ! "$version" =~ ^[0-9A-Za-z][0-9A-Za-z.+_-]*$ ]]; then
+            echo "Invalid version in app metadata" >&2
+            exit 1
+          fi
+
+          # GITHUB_OUTPUT is line-oriented. Remove CR/LF from descriptive metadata
+          # so a pull request cannot inject additional workflow outputs.
+          single_line() {
+            local value="$1"
+            value="${value//$'\\r'/ }"
+            value="${value//$'\\n'/ }"
+            printf '%s' "$value"
+          }
+
+          image_name="${image##*/}"
+          registry_prefix="${image%/*}"
+          app_name="$(single_line "${APP_NAME:-}")"
+          app_description="$(single_line "${APP_DESCRIPTION:-}")"
+          app_url="$(single_line "${APP_URL:-}")"
+
+          if [[ -z "$app_name" || -z "$app_description" ]]; then
+            echo "App name and description must be present in app metadata" >&2
+            exit 1
+          fi
+          if [[ -n "$app_url" && "$app_url" != "null" && ! "$app_url" =~ ^https?://[^[:space:]]+$ ]]; then
+            echo "Invalid URL in app metadata" >&2
+            exit 1
+          fi
+
+          {
+            printf 'image_name=%s\\n' "$image_name"
+            printf 'registry_prefix=%s\\n' "$registry_prefix"
+            printf 'version=%s\\n' "$version"
+            printf 'name=%s\\n' "$app_name"
+            printf 'description=%s\\n' "$app_description"
+            if [[ -n "$app_url" && "$app_url" != "null" ]]; then
+              printf 'url=%s\\n' "$app_url"
+            fi
+          } >> "$GITHUB_OUTPUT"
       - name: Prepare architecture matrix
         id: matrix
         uses: home-assistant/builder/actions/prepare-multi-arch-matrix@2026.09.0
