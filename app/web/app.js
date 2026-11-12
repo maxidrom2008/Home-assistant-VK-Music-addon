@@ -17,6 +17,9 @@ let currentPlaylistId = null;
 let eventReconnectDelay = 3000;
 let eventSocket = null;
 let browserTrackDuration = 0;
+// The server returns a new stream starting at the requested offset, so the
+// HTMLMediaElement currentTime is relative to that stream, not the whole track.
+let browserStreamOffset = 0;
 let timelineFrame = 0;
 let timelineSeeking = false;
 let seekRequestId = 0;
@@ -158,7 +161,8 @@ function formatDuration(seconds) {
 }
 function renderBrowserTimeline() {
   const audio = $("audio");
-  const elapsed = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+  const streamElapsed = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+  const elapsed = browserStreamOffset + Math.max(0, streamElapsed);
   const duration = browserTrackDuration;
   const seek = $("timelineSeek");
   seek.disabled = outputMode !== "browser" || !currentBrowserTrackId || duration <= 0;
@@ -171,6 +175,7 @@ function renderBrowserTimeline() {
 }
 function startBrowserTimeline(duration) {
   browserTrackDuration = Math.max(0, Number(duration) || 0);
+  browserStreamOffset = 0;
   $("browserTimeline").hidden = outputMode !== "browser";
   timelineSeeking = false;
   const seek = $("timelineSeek");
@@ -206,6 +211,9 @@ async function seekBrowserStream(seconds) {
   const source = api("tracks/" + encodeURIComponent(currentBrowserTrackId) + "/stream?start=" + target.toFixed(3));
 
   audio.pause();
+  // Seeking replaces the stream; audio.currentTime restarts at zero for the
+  // sliced stream. Keep its absolute offset for the visible track timeline.
+  browserStreamOffset = target;
   audio.src = source;
   const ready = new Promise((resolve, reject) => {
     const cleanup = () => {
@@ -687,7 +695,15 @@ $("audioOutput").addEventListener("change", event => setAudioOutput(event.target
 $("refreshOutputs").addEventListener("click", refreshAudioOutputs);
 $("audio").addEventListener("play", () => { $("browserPause").hidden = false; $("browserResume").hidden = true; $("browserStop").hidden = false; if (outputMode === "browser" && !timelineFrame) timelineFrame = requestAnimationFrame(updateBrowserTimeline); });
 $("audio").addEventListener("timeupdate", () => { if (outputMode === "browser" && !timelineSeeking) renderBrowserTimeline(); });
-$("audio").addEventListener("loadedmetadata", () => { const d = $("audio").duration; if (outputMode === "browser" && Number.isFinite(d) && d > 0) { browserTrackDuration = d; renderBrowserTimeline(); } });
+$("audio").addEventListener("loadedmetadata", () => {
+  const duration = $("audio").duration;
+  if (outputMode === "browser" && Number.isFinite(duration) && duration > 0) {
+    // Keep the original VK track duration after a seek. The duration reported
+    // by the replacement stream is only the unplayed tail of the track.
+    if (browserTrackDuration <= 0) browserTrackDuration = browserStreamOffset + duration;
+    renderBrowserTimeline();
+  }
+});
 $("audio").addEventListener("pause", () => { stopBrowserTimeline(); if (outputMode === "browser") { $("browserPause").hidden = true; $("browserResume").hidden = !$("audio").src || $("audio").ended; $("browserStop").hidden = !$("audio").src; renderBrowserTimeline(); } });
 $("audio").addEventListener("ended", () => {
   stopBrowserTimeline();
