@@ -55,3 +55,46 @@ def test_app_repository_metadata_is_valid() -> None:
     assert metadata["name"] == "VK Music Server"
     assert metadata["url"] == "https://github.com/maxidrom2008/Home-assistant-VK-Music-addon"
     assert metadata["maintainer"]
+
+
+def test_ci_metadata_normalization_is_safe_for_untrusted_pull_request_values(tmp_path: Path) -> None:
+    import os
+    import subprocess
+
+    workflow = yaml.safe_load(
+        Path(".github/workflows/validate.yml").read_text(encoding="utf-8")
+    )
+    normalize_step = next(
+        step
+        for step in workflow["jobs"]["prepare"]["steps"]
+        if step.get("name") == "Normalize app metadata"
+    )
+
+    script = normalize_step["run"]
+    # GitHub expressions must remain environment values, never shell source.
+    assert "${{ steps.info.outputs." not in script
+    assert "single_line" in script
+    assert "set -euo pipefail" in script
+
+    marker = tmp_path / "metadata-command-was-executed"
+    output = tmp_path / "github-output.txt"
+    env = os.environ.copy()
+    env.update(
+        {
+            "IMAGE": "ghcr.io/maxidrom2008/vk-music-server",
+            "VERSION": "1.0.0-rc.13",
+            "APP_NAME": f"VK Music\\nInjected=1 $(touch {marker})",
+            "APP_DESCRIPTION": "Server\\r\\nInjected=2",
+            "APP_URL": "https://github.com/maxidrom2008/Home-assistant-VK-Music-addon",
+            "GITHUB_OUTPUT": str(output),
+        }
+    )
+
+    subprocess.run(["bash", "-c", script], env=env, check=True, capture_output=True, text=True)
+
+    assert not marker.exists()
+    lines = output.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 6
+    assert "name=VK Music Injected=1 $(touch " + str(marker) + ")" in lines
+    assert "description=Server  Injected=2" in lines
+    assert "url=https://github.com/maxidrom2008/Home-assistant-VK-Music-addon" in lines
