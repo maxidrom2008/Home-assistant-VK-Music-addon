@@ -10,6 +10,7 @@ from app.playback.manager import PlaybackError, ServerPlaybackManager
 class FakeProcess:
     def __init__(self, returncode=None) -> None:
         self.returncode = returncode
+        self.stderr = None
         self.signals: list[int] = []
         self._done = asyncio.Event()
         if returncode is not None:
@@ -55,7 +56,7 @@ def test_server_playback_lifecycle_and_ffmpeg_pulse_command(monkeypatch: pytest.
         assert args[args.index("-f") + 1] == "pulse"
         assert args[-1] == "default"
         assert "VK Music Server" in args
-        assert captured[0][1]["stderr"] == asyncio.subprocess.DEVNULL
+        assert captured[0][1]["stderr"] == asyncio.subprocess.PIPE
 
         paused = await player.pause()
         assert paused["state"] == "paused"
