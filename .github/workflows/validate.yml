@@ -181,18 +181,28 @@ jobs:
           version: ${{ needs.prepare.outputs.version }}
 
   build_validate:
-    name: Validate local Docker image for pull requests
+    name: Validate local ${{ matrix.arch }} image for pull requests
     if: github.event_name == 'pull_request'
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            os: ubuntu-latest
+            platform: linux/amd64
+          - arch: aarch64
+            os: ubuntu-24.04-arm
+            platform: linux/arm64
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Build amd64 image without registry credentials
-        run: docker build --platform linux/amd64 --tag vk-music-server:pull-request .
+      - name: Build ${{ matrix.arch }} image without registry credentials
+        run: docker build --platform ${{ matrix.platform }} --tag vk-music-server:pull-request .
 
   manifest:
     name: Publish multi-architecture manifest
