@@ -1,10 +1,47 @@
 # Changelog
 
+All notable project changes are recorded here. Versions are Home Assistant add-on release candidates unless otherwise noted.
+
+## 1.0.0-rc.13
+- Fix browser playback startup after the timeline/seek-slider rewrite by removing references to a timeline progress element that is not present in the player HTML.
+- Keep the rewritten timeline renderer independent of the removed duplicate progress bar.
+- This is a JavaScript startup-regression fix; real-device playback and seek behavior still require end-to-end acceptance testing.
+
+## 1.0.0-rc.12
+- Rebuild the browser seek slider and playback timeline loop around a single animation-frame updater.
+- Separate slider drag preview from the committed seek action so a seek is applied once when the user finishes dragging.
+- Rework seek handling to replace the proxied stream at the requested offset and guard overlapping seek requests.
+- The initial rewrite contained a reference to a non-existent progress element; that startup regression is corrected in rc.13.
+
+## 1.0.0-rc.11
+- Use a controlled pause/load/readiness/resume sequence when seeking by replacing the browser audio stream.
+- Guard against stale seek completions and avoid issuing `play()` while the previous source is still being replaced.
+
+## 1.0.0-rc.10
+- Re-enable the browser seek control and explicitly enable it when a browser track with a known duration is active.
+- Keep the timeline synchronized with browser audio events.
+
+## 1.0.0-rc.9
+- Stabilize seek preview while dragging the timeline.
+- Fix browser seeking by restarting the server-proxied VK stream at the requested position instead of relying on unsupported byte-range seeking.
+- Remove the duplicate timeline display.
+
 ## 1.0.0-rc.8
 - Restore browser pause, resume and stop controls and add a functional seek slider.
 - Add volume control for browser and HAOS playback.
 - Hide PulseAudio dummy sinks from selectable outputs.
+- Polish player controls and validate browser stop-state handling.
 
+## 1.0.0-rc.7
+- Add PulseAudio diagnostics and tests for failed server-side playback.
+- Improve playback failure-state reporting and use the Supervisor audio inventory with a PulseAudio fallback.
+
+## 1.0.0-rc.3
+- Add HAOS audio-device selection and refine the sticky player layout.
+- Improve playback timeline behavior and HAOS audio-output diagnostics.
+
+## 1.0.0-rc.2
+- Fix browser playback for VK HLS streams by using the server-side FFmpeg stream conversion path.
 
 ## 1.0.0-rc.1
 - Prepare the first 1.x release candidate.
