@@ -149,6 +149,7 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
   let ended = false;
   let currentTime = 0;
   let readyState = 0;
+  let playCount = 0;
 
   Object.defineProperties(audio, {
     paused: { configurable: true, get: () => paused },
@@ -162,6 +163,7 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
     readyState: { configurable: true, get: () => readyState },
   });
   audio.play = async () => {
+    playCount += 1;
     paused = false;
     audio.dispatchEvent(new window.Event("play"));
   };
@@ -199,7 +201,7 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
     seek.dispatchEvent(new window.Event("input", { bubbles: true }));
     seek.dispatchEvent(new window.Event("change", { bubbles: true }));
     await waitFor(() => audio.src.includes("start=30.000"), "seek stream URL");
-    await waitFor(() => paused === false, "browser playback after seek");
+    await waitFor(() => playCount >= 2 && paused === false, "browser playback after seek");
 
     window.document.getElementById("serverOutput").click();
     await waitFor(
@@ -210,8 +212,9 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
 
     window.document.querySelector("#trackList button").click();
     await waitFor(
-      () => calls.some((call) => call.path === "playback/server/play"),
-      "HAOS server playback request",
+      () => calls.some((call) => call.path === "playback/server/play")
+        && !window.document.getElementById("serverPause").hidden,
+      "HAOS server playback request and updated controls",
     );
     assert.equal(window.document.getElementById("serverPause").hidden, false);
     assert.equal(window.document.getElementById("nowPlaying").textContent.includes(track.title), true);
