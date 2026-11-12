@@ -51,7 +51,8 @@ def test_server_playback_lifecycle_and_ffmpeg_pulse_command(monkeypatch: pytest.
         )
         assert state["state"] == "playing"
         assert state["mode"] == "server"
-        args = captured[0][0]
+        ffmpeg_call = next(call for call in captured if call[0][0] == "ffmpeg")
+        args = ffmpeg_call[0]
         assert "-f" in args
         assert args[args.index("-f") + 1] == "pulse"
         assert "-device" not in args
@@ -60,7 +61,7 @@ def test_server_playback_lifecycle_and_ffmpeg_pulse_command(monkeypatch: pytest.
         assert "-ac" in args and args[args.index("-ac") + 1] == "2"
         assert "-sample_fmt" in args and args[args.index("-sample_fmt") + 1] == "s16"
         assert "VK Music Server" in args
-        assert captured[0][1]["stderr"] == asyncio.subprocess.PIPE
+        assert ffmpeg_call[1]["stderr"] == asyncio.subprocess.PIPE
 
         paused = await player.pause()
         assert paused["state"] == "paused"
