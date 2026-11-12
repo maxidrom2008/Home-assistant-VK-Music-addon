@@ -15,8 +15,9 @@ def ffmpeg_command(url: str, user_agent: str, start_seconds: float = 0.0) -> lis
     return [
         "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "warning",
         "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
-        "-user_agent", user_agent, "-i", url,
+        "-user_agent", user_agent,
         *(["-ss", f"{max(0.0, float(start_seconds)):.3f}"] if start_seconds > 0 else []),
+        "-i", url,
         "-map", "0:a:0", "-vn", "-sn", "-dn",
         "-codec:a", "libmp3lame", "-q:a", "4", "-f", "mp3", "pipe:1",
     ]
