@@ -39,7 +39,11 @@ button:disabled{opacity:.5;cursor:wait}
 .outputPicker label{margin:0;color:var(--muted);font-size:13px;font-weight:650}
 select{min-width:220px;max-width:100%;border:1px solid #3b4c6d;border-radius:11px;background:#0d1628;color:#edf2ff;padding:10px 12px;font:inherit}
 #outputStatus{margin:12px 0 0;font-size:13px}
-#audio{width:100%;margin-top:12px;accent-color:var(--accent)}
+#browserTimeline{margin-top:14px}
+.timelineTimes{display:flex;justify-content:space-between;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums;margin-bottom:7px}
+.timelineRail{height:7px;border-radius:99px;background:#33415f;overflow:hidden}
+#timelineProgress{height:100%;width:0%;border-radius:99px;background:linear-gradient(90deg,var(--accent),#a6b2ff);will-change:width}
+#audio{display:none}
 #loadMore{display:none;width:100%}
 #challenge{display:none;margin-top:18px;padding-top:16px;border-top:1px solid #303e5b}
 #captcha{max-width:100%;display:block;margin:12px 0;border-radius:8px;background:#fff}
@@ -74,6 +78,7 @@ small{display:block;color:var(--muted);margin-top:10px}
     <button id="serverOutput" type="button" class="secondary">Вывод через HAOS</button>
   </div>
   <div class="outputPicker"><label for="audioOutput">Устройство вывода HAOS</label><select id="audioOutput"><option value="default">По умолчанию</option></select><button id="refreshOutputs" class="secondary" type="button">Обновить</button></div>
+  <small id="outputNotice">Доступны только устройства, опубликованные аудиослужбой Home Assistant.</small>
   <div class="playerButtons">
     <button id="previousTrack" type="button" class="secondary" aria-label="Предыдущий трек">Назад</button>
     <button id="nextTrack" type="button" class="secondary" aria-label="Следующий трек">Далее</button>
@@ -82,7 +87,13 @@ small{display:block;color:var(--muted);margin-top:10px}
     <button id="serverStop" type="button" class="danger" hidden>Остановить сервер</button>
   </div>
   <p id="outputStatus" class="muted">Воспроизведение в этом браузере</p>
-  <audio id="audio" controls preload="none"></audio>
+  <div id="browserTimeline" aria-label="Время воспроизведения">
+    <div class="timelineTimes"><span id="elapsedTime">0:00</span><span id="totalTime">0:00</span></div>
+    <div class="timelineRail" role="progressbar" aria-label="Прогресс трека" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="timelineRail">
+      <div id="timelineProgress"></div>
+    </div>
+  </div>
+  <audio id="audio" preload="none"></audio>
 </div>
 <h2>Музыка</h2>
 <div class="toolbar">

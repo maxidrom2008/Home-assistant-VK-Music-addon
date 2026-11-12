@@ -59,6 +59,13 @@ class ServerPlaybackManager:
                 {"id": str(sink.get("name") or ""), "name": str(sink.get("description") or sink.get("name") or "Аудиоустройство")}
                 for sink in sinks if isinstance(sink, dict) and sink.get("name")
             ]
+            default_process = await asyncio.create_subprocess_exec(
+                "pactl", "get-default-sink",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            default_stdout, _ = await asyncio.wait_for(default_process.communicate(), timeout=3.0)
+            default_sink = default_stdout.decode("utf-8", "replace").strip() if default_process.returncode == 0 else None
         except FileNotFoundError:
             raise PlaybackError("Утилита pactl не найдена в контейнере add-on")
         except (asyncio.TimeoutError, json.JSONDecodeError) as exc:
@@ -68,6 +75,13 @@ class ServerPlaybackManager:
         return {
             "outputs": [{"id": "default", "name": "По умолчанию"}, *outputs],
             "selected": self._output_device,
+            "default_sink": default_sink,
+            "device_count": len(outputs),
+            "notice": (
+                "Показаны только устройства, доступные аудиослужбе Home Assistant. "
+                "Bluetooth-колонки и телевизоры, подключённые только в интеграции Bluetooth/медиа, "
+                "здесь не появятся автоматически."
+            ),
         }
 
     async def select_output(self, device: str) -> dict[str, Any]:
@@ -118,6 +132,12 @@ class ServerPlaybackManager:
                 "-vn",
                 "-sn",
                 "-dn",
+                "-ac",
+                "2",
+                "-ar",
+                "48000",
+                "-sample_fmt",
+                "s16",
                 "-f",
                 "pulse",
                 "-device",
@@ -127,6 +147,8 @@ class ServerPlaybackManager:
                 "default",
             ]
             try:
+                diagnostics = await self._pulse_diagnostics()
+                _LOGGER.info("PulseAudio output diagnostics before playback:\n%s", diagnostics)
                 process = await asyncio.create_subprocess_exec(
                     *command,
                     stdin=asyncio.subprocess.DEVNULL,
@@ -176,11 +198,33 @@ class ServerPlaybackManager:
                 return self.get_state()
             return self.get_state()
 
+    async def _pulse_diagnostics(self) -> str:
+        """Collect PulseAudio server and sink state for actionable logs."""
+        details: list[str] = []
+        for args in (("pactl", "info"), ("pactl", "list", "short", "sinks")):
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *args,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.STDOUT,
+                )
+                output, _ = await asyncio.wait_for(proc.communicate(), timeout=3.0)
+                details.append("$ " + " ".join(args) + "\n" + output.decode("utf-8", "replace")[-4000:].strip())
+            except (OSError, asyncio.TimeoutError) as exc:
+                details.append("$ " + " ".join(args) + "\n" + str(exc))
+        return "\n".join(details)
+
     async def _watch(self, process: asyncio.subprocess.Process) -> None:
         return_code = await process.wait()
         stderr = await process.stderr.read() if process.stderr is not None else b""
         if return_code:
-            _LOGGER.error("Server playback FFmpeg exited (%s): %s", return_code, stderr.decode("utf-8", "replace")[-2000:].strip())
+            diagnostics = await self._pulse_diagnostics()
+            _LOGGER.error(
+                "Server playback FFmpeg exited (%s): %s\nPulseAudio diagnostics:\n%s",
+                return_code,
+                stderr.decode("utf-8", "replace")[-2000:].strip(),
+                diagnostics,
+            )
         async with self._lock:
             if self._process is not process:
                 return
@@ -200,7 +244,7 @@ class ServerPlaybackManager:
                     **self._state,
                     "state": "error",
                     "error": (
-                        "FFmpeg завершился с ошибкой. Подробности смотрите в журнале add-on."
+                        "HAOS не принял аудиопоток через PulseAudio. Проверьте выбранный выход и журнал add-on."
                     ),
                 }
         if self._on_state_change is not None:

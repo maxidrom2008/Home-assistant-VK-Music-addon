@@ -16,6 +16,8 @@ let outputMode = "browser";
 let currentPlaylistId = null;
 let eventReconnectDelay = 3000;
 let eventSocket = null;
+let browserTrackDuration = 0;
+let timelineFrame = 0;
 
 function applyServerPlaybackState(state) {
   if (!state || outputMode !== "server") return;
@@ -147,6 +149,34 @@ function formatDuration(seconds) {
   const value = Math.max(0, Number(seconds) || 0);
   return Math.floor(value / 60) + ":" + String(Math.floor(value % 60)).padStart(2, "0");
 }
+function renderBrowserTimeline() {
+  const audio = $("audio");
+  const elapsed = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+  const duration = browserTrackDuration;
+  const percent = duration > 0 ? Math.min(100, Math.max(0, elapsed / duration * 100)) : 0;
+  $("elapsedTime").textContent = formatDuration(elapsed);
+  $("totalTime").textContent = formatDuration(duration);
+  $("timelineProgress").style.width = percent.toFixed(3) + "%";
+  $("timelineRail").setAttribute("aria-valuenow", String(Math.round(percent)));
+  if (!audio.paused && !audio.ended && outputMode === "browser") {
+    timelineFrame = requestAnimationFrame(renderBrowserTimeline);
+  } else {
+    timelineFrame = 0;
+  }
+}
+function startBrowserTimeline(duration) {
+  browserTrackDuration = Math.max(0, Number(duration) || 0);
+  $("browserTimeline").hidden = false;
+  $("elapsedTime").textContent = "0:00";
+  $("totalTime").textContent = formatDuration(browserTrackDuration);
+  $("timelineProgress").style.width = "0%";
+  if (timelineFrame) cancelAnimationFrame(timelineFrame);
+  timelineFrame = requestAnimationFrame(renderBrowserTimeline);
+}
+function stopBrowserTimeline() {
+  if (timelineFrame) cancelAnimationFrame(timelineFrame);
+  timelineFrame = 0;
+}
 function renderPlaylists(items) {
   const list = $("trackList");
   list.replaceChildren();
@@ -269,7 +299,10 @@ async function playTrack(index) {
   if (!track || !track.id) return;
   currentTrackIndex = index;
   $("nowPlaying").textContent = (track.artist ? track.artist + " — " : "") + (track.title || "Без названия");
+  startBrowserTimeline(track.duration);
   if (outputMode === "server") {
+    stopBrowserTimeline();
+    $("browserTimeline").hidden = true;
     $("audio").pause();
     $("audio").removeAttribute("src");
     try {
@@ -303,6 +336,12 @@ async function refreshAudioOutputs() {
   const previous = select.value;
   try {
     const data = await call("playback/outputs");
+    $("outputNotice").textContent = data.notice || "Показаны устройства, доступные аудиослужбе HAOS.";
+    if (!data.device_count) {
+      $("outputNotice").textContent += " Сейчас аудиослужба не сообщила ни одного физического выхода.";
+    } else if (data.default_sink) {
+      $("outputNotice").textContent += " Текущий выход по умолчанию: " + data.default_sink + ".";
+    }
     select.replaceChildren();
     for (const output of data.outputs || []) {
       const option = document.createElement("option");
@@ -334,6 +373,8 @@ async function setOutputMode(mode) {
   $("browserOutput").className = mode === "browser" ? "" : "secondary";
   $("serverOutput").className = mode === "server" ? "" : "secondary";
   $("audio").hidden = mode === "server";
+  $("browserTimeline").hidden = mode === "server";
+  if (mode === "server") stopBrowserTimeline();
   $("serverPause").hidden = mode !== "server";
   $("serverResume").hidden = mode !== "server";
   $("serverStop").hidden = mode !== "server";
@@ -557,8 +598,22 @@ $("serverResume").addEventListener("click", () => serverPlaybackAction("resume")
 $("serverStop").addEventListener("click", () => serverPlaybackAction("stop"));
 $("audioOutput").addEventListener("change", event => setAudioOutput(event.target.value));
 $("refreshOutputs").addEventListener("click", refreshAudioOutputs);
-$("audio").addEventListener("ended", playNext);
+$("audio").addEventListener("play", () => {
+  if (!timelineFrame && outputMode === "browser") timelineFrame = requestAnimationFrame(renderBrowserTimeline);
+});
+$("audio").addEventListener("pause", () => {
+  if (timelineFrame) cancelAnimationFrame(timelineFrame);
+  timelineFrame = 0;
+  if (outputMode === "browser") renderBrowserTimeline();
+});
+$("audio").addEventListener("ended", () => {
+  stopBrowserTimeline();
+  $("timelineProgress").style.width = "100%";
+  $("elapsedTime").textContent = formatDuration(browserTrackDuration);
+  playNext();
+});
 $("audio").addEventListener("error", () => {
+  stopBrowserTimeline();
   if ($("audio").src) $("libraryMessage").textContent = "VK не смог предоставить поток этого трека. Попробуйте другой трек или повторите позже.";
 });
 $("copyInternalUrl").addEventListener("click", async () => {

@@ -55,6 +55,9 @@ def test_server_playback_lifecycle_and_ffmpeg_pulse_command(monkeypatch: pytest.
         assert "-f" in args
         assert args[args.index("-f") + 1] == "pulse"
         assert args[-1] == "default"
+        assert "-ar" in args and args[args.index("-ar") + 1] == "48000"
+        assert "-ac" in args and args[args.index("-ac") + 1] == "2"
+        assert "-sample_fmt" in args and args[args.index("-sample_fmt") + 1] == "s16"
         assert "VK Music Server" in args
         assert captured[0][1]["stderr"] == asyncio.subprocess.PIPE
 
