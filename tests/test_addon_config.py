@@ -74,6 +74,7 @@ def test_ci_metadata_normalization_is_safe_for_untrusted_pull_request_values(tmp
     # GitHub expressions must remain environment values, never shell source.
     assert "${{ steps.info.outputs." not in script
     assert "single_line" in script
+    assert "jq -er" in script
     assert "set -euo pipefail" in script
 
     marker = tmp_path / "metadata-command-was-executed"
@@ -81,11 +82,11 @@ def test_ci_metadata_normalization_is_safe_for_untrusted_pull_request_values(tmp
     env = os.environ.copy()
     env.update(
         {
-            "IMAGE": "ghcr.io/maxidrom2008/vk-music-server",
-            "VERSION": "1.0.0-rc.13",
+            "IMAGE": json.dumps("ghcr.io/maxidrom2008/vk-music-server"),
+            "VERSION": json.dumps("1.0.0-rc.13"),
             "APP_NAME": f"VK Music\nInjected=1 $(touch {marker})",
             "APP_DESCRIPTION": "Server\r\nInjected=2",
-            "APP_URL": "https://github.com/maxidrom2008/Home-assistant-VK-Music-addon",
+            "APP_URL": json.dumps("https://github.com/maxidrom2008/Home-assistant-VK-Music-addon"),
             "GITHUB_OUTPUT": str(output),
         }
     )
