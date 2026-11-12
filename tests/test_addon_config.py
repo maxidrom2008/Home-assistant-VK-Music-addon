@@ -48,3 +48,10 @@ def test_release_versions_are_synchronized() -> None:
     assert integration["version"] == VERSION
     assert web_package["version"] == VERSION
     assert project["project"]["version"] == "1.0.0rc1"
+
+
+def test_app_repository_metadata_is_valid() -> None:
+    metadata = yaml.safe_load(Path("repository.yaml").read_text(encoding="utf-8"))
+    assert metadata["name"] == "VK Music Server"
+    assert metadata["url"] == "https://github.com/maxidrom2008/Home-assistant-VK-Music-addon"
+    assert metadata["maintainer"]

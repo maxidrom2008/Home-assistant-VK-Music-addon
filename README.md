@@ -2,6 +2,14 @@
 
 Standalone VK Music server for Home Assistant OS. It is independent from Music Assistant and does not modify or replace the existing Music Assistant VK Edition add-on.
 
+## Add this app repository to Home Assistant
+
+Add this Git repository in **Settings → Apps → Install app → ⋮ → Repositories**:
+
+`https://github.com/maxidrom2008/Home-assistant-VK-Music-addon`
+
+The repository includes the required root-level `repository.yaml` metadata and the VK Music Server app configuration.
+
 ## 1.0.0-rc.1 — Release candidate
 
 This release candidate includes the initial standalone feature set, security hardening, and live playback events. It is intended for final Home Assistant OS validation before the stable 1.0.0 release. Real VK-account authorization and physical audio output must still be confirmed on the target installation.
