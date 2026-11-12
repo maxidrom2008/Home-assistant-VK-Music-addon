@@ -10,6 +10,7 @@
     "@vkid/captcha": "2.0.0"
   },
   "devDependencies": {
-    "esbuild": "0.25.12"
+    "esbuild": "0.25.12",
+    "jsdom": "26.1.0"
   }
 }
