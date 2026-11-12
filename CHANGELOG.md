@@ -2,6 +2,11 @@
 
 All notable project changes are recorded here. Versions are Home Assistant add-on release candidates unless otherwise noted.
 
+## 1.0.0-rc.15
+- Fix browser seek timeline position after replacing the audio stream at a requested offset.
+- Keep the displayed track duration and absolute seek position stable while the replacement stream reports only its remaining duration.
+- Add a browser regression test covering consecutive seeks and elapsed-time updates after stream reload.
+
 ## 1.0.0-rc.14
 - Harden CI metadata handling against shell injection and workflow-output newline injection; pin GitHub Actions to immutable revisions and disable persisted checkout credentials.
 - Keep pull-request validation builds read-only and build the supported `amd64` and `aarch64` images without registry credentials.

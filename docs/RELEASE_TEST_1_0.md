@@ -1,11 +1,11 @@
-# VK Music Server 1.0.0-rc.14 — HAOS acceptance checklist
+# VK Music Server 1.0.0-rc.15 — HAOS acceptance checklist
 
 Run these checks on a real Home Assistant OS installation. Keep the existing Music Assistant VK Edition add-on installed and untouched. This checklist supplements CI; mocked tests do not replace tests with a real VK account and physical audio output.
 
 ## Installation and startup
 
 - [ ] Add the repository `https://github.com/maxidrom2008/Home-assistant-VK-Music-addon` to Home Assistant Apps.
-- [ ] Confirm the installed app version is `1.0.0-rc.14`.
+- [ ] Confirm the installed app version is `1.0.0-rc.15`.
 - [ ] Confirm the app starts and `/health` reports `{"status":"ok"}`.
 - [ ] Confirm the app panel opens through Ingress and no host port is published to the LAN.
 - [ ] Confirm the app Audio settings list the available output devices.
