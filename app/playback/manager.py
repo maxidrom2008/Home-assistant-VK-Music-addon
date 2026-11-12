@@ -117,7 +117,7 @@ class ServerPlaybackManager:
             # A process that exits immediately must not be reported as playing.
             await asyncio.sleep(PLAYBACK_STARTUP_GRACE_SECONDS)
             if process.returncode is not None:
-                stderr = await process.stderr.read() if process.stderr is not None else b""
+                stderr = await process.stderr.read() if getattr(process, "stderr", None) is not None else b""
                 _LOGGER.error("Server playback FFmpeg exited (%s): %s", process.returncode, stderr.decode("utf-8", "replace")[-2000:].strip())
                 self._process = None
                 self._position_mark = None
