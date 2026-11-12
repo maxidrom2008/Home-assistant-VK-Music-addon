@@ -91,7 +91,7 @@ small{display:block;color:var(--muted);margin-top:10px}
   <p id="outputStatus" class="muted">Воспроизведение в этом браузере</p>
   <div id="browserTimeline" aria-label="Время воспроизведения">
     <div class="timelineTimes"><span id="elapsedTime">0:00</span><span id="totalTime">0:00</span></div>
-    <input id="timelineSeek" type="range" min="0" max="0" step="1" value="0" aria-label="Перемотка трека" disabled>
+    <input id="timelineSeek" type="range" min="0" max="1" step="1" value="0" aria-label="Перемотка трека">
   </div>
   <div style="display:flex;align-items:center;gap:10px;margin-top:10px"><label for="volumeControl">Громкость</label><input id="volumeControl" type="range" min="0" max="100" value="80" style="width:130px"><output id="volumeValue">80%</output></div>
   <audio id="audio" preload="none"></audio>

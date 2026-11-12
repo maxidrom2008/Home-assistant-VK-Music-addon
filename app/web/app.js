@@ -159,9 +159,12 @@ function renderBrowserTimeline() {
   const audio = $("audio");
   const elapsed = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
   const duration = browserTrackDuration;
+  const seek = $("timelineSeek");
+  seek.disabled = false;
+  if (duration > 0) seek.max = String(Math.ceil(duration));
   if (!timelineSeeking) {
     $("elapsedTime").textContent = formatDuration(elapsed);
-    $("timelineSeek").value = String(Math.round(elapsed));
+    seek.value = String(Math.min(Math.round(elapsed), Number(seek.max) || Math.round(elapsed)));
   }
   $("totalTime").textContent = formatDuration(duration);
   if (!audio.paused && !audio.ended && outputMode === "browser") {
@@ -177,7 +180,7 @@ function startBrowserTimeline(duration) {
   $("totalTime").textContent = formatDuration(browserTrackDuration);
   const seek = $("timelineSeek");
   seek.max = String(Math.max(0, Math.ceil(browserTrackDuration)));
-  seek.disabled = !(browserTrackDuration > 0);
+  seek.disabled = false;
   seek.value = "0";
   if (timelineFrame) cancelAnimationFrame(timelineFrame);
   timelineFrame = 0;
