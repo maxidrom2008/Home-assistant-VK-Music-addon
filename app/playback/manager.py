@@ -260,7 +260,7 @@ class ServerPlaybackManager:
                 )
                 output, _ = await asyncio.wait_for(proc.communicate(), timeout=3.0)
                 details.append("$ " + " ".join(args) + "\n" + output.decode("utf-8", "replace")[-4000:].strip())
-            except (OSError, asyncio.TimeoutError) as exc:
+            except (OSError, asyncio.TimeoutError, AttributeError) as exc:
                 details.append("$ " + " ".join(args) + "\n" + str(exc))
         return "\n".join(details)
 

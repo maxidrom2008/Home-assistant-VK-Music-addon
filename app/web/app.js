@@ -313,6 +313,7 @@ async function playTrack(index) {
         method:"POST",
         body:JSON.stringify({track_id:track.id})
       });
+      applyServerPlaybackState(state);
       $("outputStatus").textContent = state.state === "playing"
         ? "Играет через HAOS · " + (state.output || "PulseAudio")
         : (state.error || "Серверный вывод не начал воспроизведение");
