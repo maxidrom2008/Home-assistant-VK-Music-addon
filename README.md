@@ -2,7 +2,7 @@
 
 Standalone VK Music server for Home Assistant OS with a companion Home Assistant `media_player` integration. It runs independently of Music Assistant and does not modify or replace the legacy Music Assistant VK Edition add-on.
 
-**Current release candidate: `1.0.0-rc.13`.** This is a pre-release. CI validates the code, browser bundle and multi-architecture images, but real VK authorization, audible output and hardware-specific playback still require acceptance testing on the target Home Assistant installation.
+**Current release candidate: `1.0.0-rc.14`.** This is a pre-release. CI validates the code, browser bundle and multi-architecture images, but real VK authorization, audible output and hardware-specific playback still require acceptance testing on the target Home Assistant installation.
 
 ## Features
 
