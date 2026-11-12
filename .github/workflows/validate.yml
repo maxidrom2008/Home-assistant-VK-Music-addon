@@ -15,6 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12"
@@ -59,6 +61,8 @@ jobs:
       url: ${{ steps.normalize.outputs.url }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Read app metadata
         id: info
         uses: home-assistant/actions/helpers/info@86d4564712fa02543c808e3a693dd04f9d3f8361 # master snapshot
@@ -144,6 +148,7 @@ jobs:
 
   build:
     name: Build ${{ matrix.arch }} image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: prepare
     runs-on: ${{ matrix.os }}
     permissions:
@@ -174,6 +179,20 @@ jobs:
             io.hass.url=${{ needs.prepare.outputs.url }}
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           version: ${{ needs.prepare.outputs.version }}
+
+  build_validate:
+    name: Validate local Docker image for pull requests
+    if: github.event_name == 'pull_request'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build amd64 image without registry credentials
+        run: docker build --platform linux/amd64 --tag vk-music-server:pull-request .
 
   manifest:
     name: Publish multi-architecture manifest
