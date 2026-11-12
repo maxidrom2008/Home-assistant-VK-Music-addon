@@ -121,7 +121,6 @@ def test_direct_runtime_dependencies_are_exactly_pinned() -> None:
 
 
 def test_github_actions_are_pinned_to_full_commit_shas() -> None:
-    import re
     from pathlib import Path
 
     for workflow_path in (
@@ -129,9 +128,17 @@ def test_github_actions_are_pinned_to_full_commit_shas() -> None:
         Path(".github/workflows/hassfest.yml"),
     ):
         workflow = workflow_path.read_text(encoding="utf-8")
-        action_refs = re.findall(r"^\\s*uses:\\s*([^\\s#]+)", workflow, re.MULTILINE)
+        action_refs = []
+        for line in workflow.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("uses:"):
+                action_refs.append(
+                    stripped.removeprefix("uses:").split("#", 1)[0].strip()
+                )
+
         assert action_refs, f"No actions found in {workflow_path}"
-        assert all(
-            re.search(r"@[0-9a-f]{40}$", action_ref)
-            for action_ref in action_refs
-        ), f"Action is not pinned to an immutable commit SHA in {workflow_path}"
+        for action_ref in action_refs:
+            revision = action_ref.rsplit("@", 1)[-1]
+            assert len(revision) == 40 and all(
+                char in "0123456789abcdef" for char in revision
+            ), f"Action is not pinned to an immutable commit SHA: {action_ref}"
