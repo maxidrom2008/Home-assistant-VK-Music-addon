@@ -41,7 +41,10 @@ select{min-width:220px;max-width:100%;border:1px solid #3b4c6d;border-radius:11p
 #outputStatus{margin:12px 0 0;font-size:13px}
 #browserTimeline{margin-top:14px}
 .timelineTimes{display:flex;justify-content:space-between;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums;margin-bottom:7px}
-.timelineRail{height:7px;border-radius:99px;background:#33415f;overflow:hidden}
+#timelineSeek{display:block;width:100%;height:22px;padding:0;margin:0;accent-color:var(--accent);cursor:pointer;background:transparent;border:0;touch-action:pan-y}
+#timelineSeek:disabled{opacity:.45;cursor:not-allowed}
+#volumeControl{width:130px;padding:0;accent-color:var(--accent);cursor:pointer}
+.timelineRail{height:4px;border-radius:99px;background:#33415f;overflow:hidden}
 #timelineProgress{height:100%;width:0%;border-radius:99px;background:linear-gradient(90deg,var(--accent),#a6b2ff);will-change:width}
 #audio{display:none}
 #loadMore{display:none;width:100%}
