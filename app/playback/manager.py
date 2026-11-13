@@ -343,8 +343,8 @@ class _PlaybackZone:
                     ),
                 }
                 self._position = 0.0
-                return self.get_state()
-            return self.get_state()
+                return _PlaybackZone.get_state(self)
+            return _PlaybackZone.get_state(self)
 
     async def _pulse_diagnostics(self) -> str:
         """Collect PulseAudio server and sink state for actionable logs."""
@@ -430,7 +430,7 @@ class _PlaybackZone:
                 raise PlaybackError(f"Неизвестная полоса эквалайзера: {name}")
             self._equalizer[name] = max(-12.0, min(12.0, float(value)))
         self._state["equalizer"] = dict(self._equalizer)
-        return self.get_state()
+        return _PlaybackZone.get_state(self)
 
     async def pause(self) -> dict[str, Any]:
         async with self._lock:
@@ -445,7 +445,7 @@ class _PlaybackZone:
             except ProcessLookupError as exc:
                 raise PlaybackError("Процесс воспроизведения уже завершился") from exc
             self._state["state"] = "paused"
-            return self.get_state()
+            return _PlaybackZone.get_state(self)
 
     async def resume(self) -> dict[str, Any]:
         async with self._lock:
@@ -457,12 +457,12 @@ class _PlaybackZone:
                 raise PlaybackError("Процесс воспроизведения уже завершился") from exc
             self._position_mark = time.monotonic()
             self._state["state"] = "playing"
-            return self.get_state()
+            return _PlaybackZone.get_state(self)
 
     async def stop(self) -> dict[str, Any]:
         async with self._lock:
             await self._stop_locked()
-            return self.get_state()
+            return _PlaybackZone.get_state(self)
 
 
 
