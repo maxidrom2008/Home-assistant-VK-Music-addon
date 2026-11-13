@@ -528,11 +528,12 @@ class ServerPlaybackManager(_PlaybackZone):
     def get_state(self, output_device: str | None = None) -> dict[str, Any]:
         device = str(output_device or self._selected_output or "default")
         zone = self._zone(device)
-        return {**zone.get_state(), "output_device": device}
+        state = _PlaybackZone.get_state(zone)
+        return {**state, "output_device": device}
 
     def get_states(self) -> list[dict[str, Any]]:
         return [
-            {**zone.get_state(), "output_device": device}
+            {**_PlaybackZone.get_state(zone), "output_device": device}
             for device, zone in self._zones.items()
         ]
 
@@ -545,31 +546,37 @@ class ServerPlaybackManager(_PlaybackZone):
         start_seconds: float = 0.0,
     ) -> dict[str, Any]:
         device = str(output_device or self._selected_output or "default")
-        state = await self._zone(device).play(stream_url, user_agent, track, start_seconds)
+        zone = self._zone(device)
+        state = await _PlaybackZone.play(zone, stream_url, user_agent, track, start_seconds) if device == "default" else await zone.play(stream_url, user_agent, track, start_seconds)
         return {**state, "output_device": device}
 
     async def set_volume(self, volume: float, output_device: str | None = None) -> dict[str, Any]:
         device = str(output_device or self._selected_output or "default")
-        result = await self._zone(device).set_volume(volume)
+        zone = self._zone(device)
+        result = await _PlaybackZone.set_volume(zone, volume) if device == "default" else await zone.set_volume(volume)
         return {**result, "output_device": device}
 
     async def set_equalizer(
         self, bands: dict[str, float], output_device: str | None = None
     ) -> dict[str, Any]:
         device = str(output_device or self._selected_output or "default")
-        return await self._zone(device).set_equalizer(bands)
+        zone = self._zone(device)
+        return await _PlaybackZone.set_equalizer(zone, bands) if device == "default" else await zone.set_equalizer(bands)
 
     async def pause(self, output_device: str | None = None) -> dict[str, Any]:
         device = str(output_device or self._selected_output or "default")
-        return await self._zone(device).pause()
+        zone = self._zone(device)
+        return await _PlaybackZone.pause(zone) if device == "default" else await zone.pause()
 
     async def resume(self, output_device: str | None = None) -> dict[str, Any]:
         device = str(output_device or self._selected_output or "default")
-        return await self._zone(device).resume()
+        zone = self._zone(device)
+        return await _PlaybackZone.resume(zone) if device == "default" else await zone.resume()
 
     async def stop(self, output_device: str | None = None) -> dict[str, Any]:
         device = str(output_device or self._selected_output or "default")
-        return await self._zone(device).stop()
+        zone = self._zone(device)
+        return await _PlaybackZone.stop(zone) if device == "default" else await zone.stop()
 
     async def stop_all(self) -> None:
         for device, zone in list(self._zones.items()):
