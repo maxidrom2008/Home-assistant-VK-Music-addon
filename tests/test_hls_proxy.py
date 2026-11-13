@@ -23,7 +23,7 @@ def test_rewrite_master_playlist_and_uri_attributes() -> None:
     assert "#EXTM3U" in rewritten
     assert "https://cdn.vk.example" not in rewritten
     assert "sig=secret" not in rewritten
-    assert len([part for part in rewritten.splitlines() if part and not part.startswith("#")]) == 2\n    assert "URI=" in rewritten
+    assert "URI=" in rewritten\n    assert len(proxy._sessions[session].resources) == 3
     assert resource
 
 
