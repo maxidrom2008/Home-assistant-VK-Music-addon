@@ -28,6 +28,90 @@ let playbackVolume = 0.8;
 let currentBrowserTrackId = null;
 let browserHls = null;
 let browserPlaybackMode = "legacy";
+let spectrumContext = null;
+let spectrumAnalyser = null;
+let spectrumSource = null;
+let spectrumData = null;
+let spectrumFrame = 0;
+let spectrumCanvasContext = null;
+let spectrumCanvasSize = "";
+const SPECTRUM_BANDS = 12;
+const SPECTRUM_MIN_HZ = 50;
+const SPECTRUM_MAX_HZ = 20000;
+
+function stopSpectrumAnimation() {
+  if (spectrumFrame) cancelAnimationFrame(spectrumFrame);
+  spectrumFrame = 0;
+}
+
+function drawSpectrum() {
+  spectrumFrame = 0;
+  const audio = $("audio");
+  const canvas = $("spectrumCanvas");
+  if (!spectrumAnalyser || !spectrumCanvasContext || audio.paused || outputMode !== "browser") return;
+  const width = Math.max(1, Math.floor(canvas.clientWidth || canvas.getBoundingClientRect().width || 320));
+  const height = Math.max(1, Math.floor(canvas.clientHeight || 58));
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const size = Math.round(width * dpr) + "x" + Math.round(height * dpr);
+  if (size !== spectrumCanvasSize) {
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+    spectrumCanvasContext.setTransform(dpr, 0, 0, dpr, 0, 0);
+    spectrumCanvasSize = size;
+  }
+  spectrumAnalyser.getFloatFrequencyData(spectrumData);
+  const ctx = spectrumCanvasContext;
+  ctx.clearRect(0, 0, width, height);
+  const gap = 5;
+  const barWidth = Math.max(2, (width - gap * (SPECTRUM_BANDS - 1)) / SPECTRUM_BANDS);
+  const nyquist = spectrumContext.sampleRate / 2;
+  for (let band = 0; band < SPECTRUM_BANDS; band += 1) {
+    const lowHz = SPECTRUM_MIN_HZ * Math.pow(SPECTRUM_MAX_HZ / SPECTRUM_MIN_HZ, band / SPECTRUM_BANDS);
+    const highHz = SPECTRUM_MIN_HZ * Math.pow(SPECTRUM_MAX_HZ / SPECTRUM_MIN_HZ, (band + 1) / SPECTRUM_BANDS);
+    const first = Math.max(0, Math.floor(lowHz / nyquist * spectrumData.length));
+    const last = Math.min(spectrumData.length - 1, Math.max(first, Math.ceil(Math.min(highHz, nyquist) / nyquist * spectrumData.length)));
+    let sum = 0;
+    let count = 0;
+    for (let bin = first; bin <= last; bin += 1) {
+      const db = spectrumData[bin];
+      if (Number.isFinite(db)) { sum += Math.max(0, Math.min(1, (db + 88) / 62)); count += 1; }
+    }
+    const level = count ? sum / count : 0;
+    const barHeight = Math.max(2, level * (height - 5));
+    const x = band * (barWidth + gap);
+    const y = height - barHeight;
+    const gradient = ctx.createLinearGradient(0, y, 0, height);
+    gradient.addColorStop(0, "#a5b4fc");
+    gradient.addColorStop(1, "#5368e8");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(x, y, barWidth, barHeight);
+  }
+  spectrumFrame = requestAnimationFrame(drawSpectrum);
+}
+
+function startSpectrum() {
+  if (outputMode !== "browser") return;
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+  try {
+    if (!spectrumContext) {
+      spectrumContext = new AudioContextClass();
+      spectrumAnalyser = spectrumContext.createAnalyser();
+      spectrumAnalyser.fftSize = 4096;
+      spectrumAnalyser.smoothingTimeConstant = 0.78;
+      spectrumData = new Float32Array(spectrumAnalyser.frequencyBinCount);
+      spectrumSource = spectrumContext.createMediaElementSource($("audio"));
+      spectrumSource.connect(spectrumAnalyser);
+      spectrumAnalyser.connect(spectrumContext.destination);
+      spectrumCanvasContext = $("spectrumCanvas").getContext("2d");
+    }
+    if (spectrumContext.state === "suspended") spectrumContext.resume().catch(() => {});
+    if (!spectrumFrame && spectrumCanvasContext) spectrumFrame = requestAnimationFrame(drawSpectrum);
+  } catch (err) {
+    // Playback must continue normally if Web Audio or canvas analysis is unavailable.
+    stopSpectrumAnimation();
+  }
+}
 
 function applyServerPlaybackState(state) {
   if (!state || outputMode !== "server") return;
@@ -474,9 +558,7 @@ async function playTrack(index) {
   try {
     const usedHls = await startHlsBrowserStream(track);
     if (!usedHls) await startLegacyBrowserStream(track);
-    $("outputStatus").textContent = browserPlaybackMode === "hls"
-      ? "Воспроизведение через HLS · перемотка без перезапуска FFmpeg"
-      : "Воспроизведение в браузере (резервный FFmpeg-поток)";
+    $("outputStatus").textContent = "Воспроизведение в браузере";
   } catch (err) {
     destroyBrowserHls();
     try {
@@ -533,6 +615,7 @@ async function setOutputMode(mode) {
   $("serverOutput").className = mode === "server" ? "" : "secondary";
   $("audio").hidden = false;
   $("browserTimeline").hidden = mode === "server";
+  $("spectrumCanvas").hidden = mode === "server";
   $("browserControls").hidden = mode === "server"; $("volumeControl").value = String(Math.round(playbackVolume*100)); $("audio").volume = playbackVolume;
   if (mode === "server") stopBrowserTimeline();
   $("serverPause").hidden = true; $("serverResume").hidden = true; $("serverStop").hidden = true;
@@ -774,7 +857,7 @@ $("timelineSeek").addEventListener("blur", () => { if (timelineSeeking) { timeli
 $("volumeControl").addEventListener("input",async e=>{playbackVolume=Math.max(0,Math.min(1,Number(e.target.value)/100));$("volumeValue").textContent=Math.round(playbackVolume*100)+"%";$("audio").volume=playbackVolume;if(outputMode==="server"){try{await call("playback/volume",{method:"POST",body:JSON.stringify({volume:playbackVolume})});}catch(err){$("outputStatus").textContent="Ошибка громкости: "+err.message;}}});
 $("audioOutput").addEventListener("change", event => setAudioOutput(event.target.value));
 $("refreshOutputs").addEventListener("click", refreshAudioOutputs);
-$("audio").addEventListener("play", () => { $("browserPause").hidden = false; $("browserResume").hidden = true; $("browserStop").hidden = false; if (outputMode === "browser" && !timelineFrame) timelineFrame = requestAnimationFrame(updateBrowserTimeline); });
+$("audio").addEventListener("play", () => { $("browserPause").hidden = false; $("browserResume").hidden = true; $("browserStop").hidden = false; if (outputMode === "browser" && !timelineFrame) timelineFrame = requestAnimationFrame(updateBrowserTimeline); startSpectrum(); });
 $("audio").addEventListener("timeupdate", () => { if (outputMode === "browser" && !timelineSeeking) renderBrowserTimeline(); });
 $("audio").addEventListener("loadedmetadata", () => {
   const duration = $("audio").duration;
@@ -785,7 +868,7 @@ $("audio").addEventListener("loadedmetadata", () => {
     renderBrowserTimeline();
   }
 });
-$("audio").addEventListener("pause", () => { stopBrowserTimeline(); if (outputMode === "browser") { $("browserPause").hidden = true; $("browserResume").hidden = !$("audio").src || $("audio").ended; $("browserStop").hidden = !$("audio").src; renderBrowserTimeline(); } });
+$("audio").addEventListener("pause", () => { stopBrowserTimeline(); stopSpectrumAnimation(); if (outputMode === "browser") { $("browserPause").hidden = true; $("browserResume").hidden = !$("audio").src || $("audio").ended; $("browserStop").hidden = !$("audio").src; renderBrowserTimeline(); } });
 $("audio").addEventListener("ended", () => {
   stopBrowserTimeline();
   $("elapsedTime").textContent = formatDuration(browserTrackDuration);

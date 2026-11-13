@@ -211,6 +211,12 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
       "browser player track title",
     );
     assert.equal(paused, false);
+    const spectrum = window.document.getElementById("spectrumCanvas");
+    assert.ok(spectrum, "player includes a spectrum visualizer");
+    assert.equal(spectrum.dataset.bands, "12");
+    assert.equal(spectrum.dataset.minFrequency, "50");
+    assert.equal(spectrum.dataset.maxFrequency, "20000");
+    assert.equal(window.document.getElementById("outputStatus").textContent.includes("HLS"), false);
     assert.equal(window.document.getElementById("timelineSeek").disabled, false);
 
     const seek = window.document.getElementById("timelineSeek");
