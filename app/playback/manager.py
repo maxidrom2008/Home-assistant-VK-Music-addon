@@ -234,6 +234,7 @@ class _PlaybackZone:
             state["position"] = round(self._position, 1)
         state["output_device"] = self._output_device
         state["equalizer"] = dict(self._equalizer)
+        state["volume"] = self._volume
         return state
 
     async def play(
