@@ -222,14 +222,21 @@ async function refreshPlaybackZones() {
       return;
     }
     for (const zone of active) {
-      const item = document.createElement("div");
+      const item = document.createElement("button");
+      item.type = "button";
       item.className = "zoneStatus";
+      item.setAttribute("aria-pressed", String(zone.output_device === selectedOutputDevice));
+      item.title = "Переключить панель управления на эту зону";
       const name = document.createElement("strong");
       name.textContent = zone.output || zone.output_device || "HAOS";
       const detail = document.createElement("span");
       const track = zone.track ? [zone.track.artist, zone.track.title].filter(Boolean).join(" — ") : "Нет трека";
       detail.textContent = track + " · " + (zone.state === "playing" ? "играет" : zone.state === "paused" ? "пауза" : "ошибка");
       item.append(name, detail);
+      item.addEventListener("click", async () => {
+        if (outputMode !== "server") await setOutputMode("server");
+        if (zone.output_device !== selectedOutputDevice) await setAudioOutput(zone.output_device);
+      });
       host.append(item);
     }
   } catch (err) {
