@@ -2,7 +2,7 @@
 
 Standalone VK Music server for Home Assistant OS with a companion Home Assistant `media_player` integration. It runs independently of Music Assistant and does not modify or replace the legacy Music Assistant VK Edition add-on.
 
-**Current release candidate: `1.0.0-rc.21`.** This is a pre-release. CI validates the code, browser bundle and multi-architecture images, but real VK authorization, audible output and hardware-specific playback still require acceptance testing on the target Home Assistant installation.
+**Current release candidate: `1.0.0-rc.22`.** This is a pre-release. CI validates the code, browser bundle and multi-architecture images, but real VK authorization, audible output and hardware-specific playback still require acceptance testing on the target Home Assistant installation.
 
 ## Features
 
@@ -11,7 +11,9 @@ Standalone VK Music server for Home Assistant OS with a companion Home Assistant
 - Personal audio library, playlists, playlist tracks, text search and pagination.
 - Browser playback uses a server-side HLS proxy with HLS.js (native HLS where available); signed VK CDN URLs, encryption-key URLs and private playlist access keys remain server-side. FFmpeg transcoding remains available as a compatibility fallback. HLS seeks are handled by the browser media pipeline without restarting FFmpeg.
 - Browser controls: play, pause, resume, stop, previous/next, volume and seek. The server reuses the signed VK stream URL while seeking and asks FFmpeg to seek in the source before transcoding, avoiding a fresh VK API lookup and full decode from the beginning for each seek.
-- Optional server-side playback through FFmpeg and the Home Assistant shared PulseAudio service, with output-device selection and diagnostics.
+- Independent playback zones: browser audio and each selected HAOS/PulseAudio output run separately, so switching the control panel or starting another zone never stops existing streams.
+- HAOS controls include per-output seek, volume, pause/resume and a five-band FFmpeg equalizer; only the selected zone restarts when seeking or changing its EQ.
+- Active HAOS zones are listed in the player so different tracks can play simultaneously on different outputs.
 - Companion Home Assistant `media_player` integration with library/playlist browsing and native media search.
 - Home Assistant Ingress panel without a published LAN host port.
 - Multi-architecture add-on images for `amd64` and `aarch64`.
@@ -24,7 +26,7 @@ Standalone VK Music server for Home Assistant OS with a companion Home Assistant
 3. Install **VK Music Server** from the Apps store.
 4. Open its Ingress panel and sign in with your VK phone/email and password.
 5. Complete any CAPTCHA or verification challenge requested by VK.
-6. Choose browser playback or HAOS server playback. For server playback, select an available output in the app's Audio settings.
+6. Choose the browser zone or an HAOS output in the player. To run several streams at once, start a track in one HAOS output, select another output and start a different track; previous zones and browser playback keep playing. Seek and EQ are controlled independently for the selected HAOS output.
 
 The app publishes images to `ghcr.io/maxidrom2008/vk-music-server` for `amd64` and `aarch64`. CI builds and validates both architectures before the multi-architecture image is published from `main).
 
@@ -62,7 +64,7 @@ Then restart Home Assistant.
 3. In Home Assistant, open **Settings → Devices & services → Add integration**.
 4. Search for **VK Music Server** and paste the internal URL.
 
-The integration creates `media_player.vk_music_server`. It supports playback controls, browsing the personal library and playlists, and native media search. The internal URL is reachable only within the Home Assistant network; the add-on does not publish this port to the LAN.
+The integration creates `media_player.vk_music_server`. It supports playback controls (including seek and volume), browsing the personal library and playlists, and native media search. The internal URL is reachable only within the Home Assistant network; the add-on does not publish this port to the LAN.
 
 ## VK account and token handling
 

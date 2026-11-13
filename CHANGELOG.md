@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.0-rc.22
+- Split HAOS playback into independent PulseAudio output zones; starting or selecting one no longer stops the browser stream or other zones.
+- Add independent per-zone timeline seeking, volume and a five-band FFmpeg equalizer; seeking and EQ changes restart only the targeted zone at its current position.
+- Add active-zone status cards and per-output controls in the player UI; expose seek and volume through the Home Assistant media_player integration.
+- Add regression coverage for parallel output processes, per-zone state and FFmpeg seek/EQ filters.
+
+
 ## 1.0.0-rc.21
 - Reduce spectrum analyzer gain and soften its response to prevent loud peaks from pinning most frequency bars at maximum.
 - Increase visualizer height by 50% and render 14 stacked green-to-red color segments per frequency band.

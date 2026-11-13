@@ -21,8 +21,8 @@ _LOGGER = logging.getLogger(__name__)
 PLAYBACK_STARTUP_GRACE_SECONDS = 1.0
 
 
-class ServerPlaybackManager:
-    """Own one FFmpeg process connected to the Supervisor audio service."""
+class _PlaybackZone:
+    """Own one FFmpeg process connected to a single PulseAudio output."""
 
     def __init__(
         self,
@@ -46,6 +46,7 @@ class ServerPlaybackManager:
         self._position = 0.0
         self._position_mark: float | None = None
         self._volume = 0.8
+        self._equalizer: dict[str, float] = {"bass": 0.0, "low_mid": 0.0, "mid": 0.0, "high_mid": 0.0, "treble": 0.0}
 
     async def _supervisor_outputs(self) -> tuple[list[dict[str, str]], str | None]:
         """Read host audio outputs from the Supervisor audio API."""
@@ -231,6 +232,9 @@ class ServerPlaybackManager:
             )
         else:
             state["position"] = round(self._position, 1)
+        state["output_device"] = self._output_device
+        state["equalizer"] = dict(self._equalizer)
+        state["volume"] = self._volume
         return state
 
     async def play(
@@ -238,6 +242,7 @@ class ServerPlaybackManager:
         stream_url: str,
         user_agent: str,
         track: dict[str, Any],
+        start_seconds: float = 0.0,
     ) -> dict[str, Any]:
         if not stream_url.startswith("https://"):
             raise PlaybackError("VK вернул неподдерживаемый адрес аудиопотока")
@@ -257,6 +262,7 @@ class ServerPlaybackManager:
                 "5",
                 "-user_agent",
                 user_agent,
+                *( ["-ss", f"{max(0.0, float(start_seconds)):.3f}"] if start_seconds > 0 else [] ),
                 "-i",
                 stream_url,
                 "-vn",
@@ -269,7 +275,14 @@ class ServerPlaybackManager:
                 "-sample_fmt",
                 "s16",
                 "-af",
-                f"volume={self._volume}",
+                ",".join([
+                    f"volume={self._volume}",
+                    *[
+                        f"equalizer=f={frequency}:t=q:w=1:g={self._equalizer[band]:.1f}"
+                        for band, frequency in (("bass", 60), ("low_mid", 250), ("mid", 1000), ("high_mid", 4000), ("treble", 12000))
+                        if abs(self._equalizer[band]) >= 0.05
+                    ],
+                ]),
                 "-f",
                 "pulse",
                 "-name",
@@ -294,7 +307,7 @@ class ServerPlaybackManager:
                 raise PlaybackError(f"Не удалось запустить FFmpeg: {exc.strerror}") from exc
 
             self._process = process
-            self._position = 0.0
+            self._position = max(0.0, float(start_seconds))
             self._position_mark = time.monotonic()
             self._state = {
                 "state": "playing",
@@ -306,6 +319,8 @@ class ServerPlaybackManager:
                     "duration": int(track.get("duration") or 0),
                 },
                 "output": self._output_label,
+                "output_device": self._output_device,
+                "equalizer": dict(self._equalizer),
                 "error": None,
             }
             self._monitor_task = asyncio.create_task(self._watch(process))
@@ -321,15 +336,15 @@ class ServerPlaybackManager:
                     "state": "error",
                     "mode": "server",
                     "track": None,
-                    "output": "Home Assistant Audio (PulseAudio)",
+                    "output": self._output_label,
                     "error": (
                         "FFmpeg не смог открыть аудиопоток или PulseAudio. "
                         "Подробности смотрите в журнале add-on."
                     ),
                 }
                 self._position = 0.0
-                return self.get_state()
-            return self.get_state()
+                return _PlaybackZone.get_state(self)
+            return _PlaybackZone.get_state(self)
 
     async def _pulse_diagnostics(self) -> str:
         """Collect PulseAudio server and sink state for actionable logs."""
@@ -368,7 +383,7 @@ class ServerPlaybackManager:
                     "state": "idle",
                     "mode": "server",
                     "track": None,
-                    "output": "Home Assistant Audio (PulseAudio)",
+                    "output": self._output_label,
                     "error": None,
                 }
                 self._position = 0.0
@@ -382,7 +397,7 @@ class ServerPlaybackManager:
                 }
         if self._on_state_change is not None:
             try:
-                await self._on_state_change(self.get_state())
+                await self._on_state_change(_PlaybackZone.get_state(self))
             except Exception:
                 # Event delivery must never break playback process monitoring.
                 pass
@@ -403,9 +418,19 @@ class ServerPlaybackManager:
             "state": "idle",
             "mode": "server",
             "track": None,
-            "output": "Home Assistant Audio (PulseAudio)",
+            "output": self._output_label,
             "error": None,
         }
+
+    async def set_equalizer(self, bands: dict[str, float]) -> dict[str, Any]:
+        """Store a safe five-band equalizer profile for this output."""
+        allowed = {"bass", "low_mid", "mid", "high_mid", "treble"}
+        for name, value in bands.items():
+            if name not in allowed:
+                raise PlaybackError(f"Неизвестная полоса эквалайзера: {name}")
+            self._equalizer[name] = max(-12.0, min(12.0, float(value)))
+        self._state["equalizer"] = dict(self._equalizer)
+        return _PlaybackZone.get_state(self)
 
     async def pause(self) -> dict[str, Any]:
         async with self._lock:
@@ -420,7 +445,7 @@ class ServerPlaybackManager:
             except ProcessLookupError as exc:
                 raise PlaybackError("Процесс воспроизведения уже завершился") from exc
             self._state["state"] = "paused"
-            return self.get_state()
+            return _PlaybackZone.get_state(self)
 
     async def resume(self) -> dict[str, Any]:
         async with self._lock:
@@ -432,9 +457,139 @@ class ServerPlaybackManager:
                 raise PlaybackError("Процесс воспроизведения уже завершился") from exc
             self._position_mark = time.monotonic()
             self._state["state"] = "playing"
-            return self.get_state()
+            return _PlaybackZone.get_state(self)
 
     async def stop(self) -> dict[str, Any]:
         async with self._lock:
             await self._stop_locked()
-            return self.get_state()
+            return _PlaybackZone.get_state(self)
+
+
+
+class ServerPlaybackManager(_PlaybackZone):
+    """Coordinate independent playback processes for each HAOS output."""
+
+    def __init__(
+        self,
+        ffmpeg_binary: str = "ffmpeg",
+        on_state_change: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+    ) -> None:
+        super().__init__(ffmpeg_binary=ffmpeg_binary, on_state_change=on_state_change)
+        self._zones: dict[str, _PlaybackZone] = {"default": self}
+        self._zone_labels: dict[str, str] = {"default": "По умолчанию"}
+        self._selected_output = "default"
+
+    def _selected_zone_device(self, output_device: str | None = None) -> str:
+        if output_device:
+            return str(output_device)
+        # Preserve compatibility with callers that set the legacy selected
+        # _output_device attribute directly, while preferring the new selector.
+        if self._output_device != "default":
+            return self._output_device
+        return self._selected_output or "default"
+
+    def _zone(self, output_device: str | None = None) -> _PlaybackZone:
+        device = self._selected_zone_device(output_device)
+        zone = self._zones.get(device)
+        if zone is None:
+            zone = _PlaybackZone(
+                ffmpeg_binary=self.ffmpeg_binary,
+                on_state_change=lambda state, key=device: self._publish_zone_state(key, state),
+            )
+            zone._output_device = device
+            zone._output_label = self._zone_labels.get(device, device)
+            self._zones[device] = zone
+        return zone
+
+    async def _publish_zone_state(self, device: str, state: dict[str, Any]) -> None:
+        if self._on_state_change is not None:
+            payload = {**state, "output_device": device}
+            try:
+                await self._on_state_change(payload)
+            except Exception:
+                pass
+
+    async def list_outputs(self) -> dict[str, Any]:
+        data = await super().list_outputs()
+        outputs = data.get("outputs", [])
+        self._zone_labels.update({
+            str(item["id"]): str(item["name"])
+            for item in outputs if isinstance(item, dict) and item.get("id")
+        })
+        for device, zone in self._zones.items():
+            if device != "default" and device in self._zone_labels:
+                zone._output_label = self._zone_labels[device]
+        data["selected"] = self._selected_output
+        data["active"] = self.get_states()
+        return data
+
+    async def select_output(self, device: str) -> dict[str, Any]:
+        data = await super().list_outputs()
+        choices = {str(item["id"]): str(item["name"]) for item in data.get("outputs", []) if item.get("id")}
+        if device not in choices:
+            raise PlaybackError("Выбранное аудиоустройство больше недоступно. Обновите список.")
+        self._selected_output = device
+        self._zone_labels[device] = choices[device]
+        zone = self._zone(device)
+        zone._output_label = choices[device]
+        return {"selected": device, "name": choices[device], "active": self.get_states()}
+
+    def get_state(self, output_device: str | None = None) -> dict[str, Any]:
+        device = self._selected_zone_device(output_device)
+        zone = self._zone(device)
+        state = _PlaybackZone.get_state(zone)
+        return {**state, "output_device": device}
+
+    def get_states(self) -> list[dict[str, Any]]:
+        return [
+            {**_PlaybackZone.get_state(zone), "output_device": device}
+            for device, zone in self._zones.items()
+        ]
+
+    async def play(
+        self,
+        stream_url: str,
+        user_agent: str,
+        track: dict[str, Any],
+        output_device: str | None = None,
+        start_seconds: float = 0.0,
+    ) -> dict[str, Any]:
+        device = self._selected_zone_device(output_device)
+        zone = self._zone(device)
+        state = await _PlaybackZone.play(zone, stream_url, user_agent, track, start_seconds) if device == "default" else await zone.play(stream_url, user_agent, track, start_seconds)
+        return {**state, "output_device": device}
+
+    async def set_volume(self, volume: float, output_device: str | None = None) -> dict[str, Any]:
+        device = self._selected_zone_device(output_device)
+        zone = self._zone(device)
+        result = await _PlaybackZone.set_volume(zone, volume) if device == "default" else await zone.set_volume(volume)
+        return {**result, "output_device": device}
+
+    async def set_equalizer(
+        self, bands: dict[str, float], output_device: str | None = None
+    ) -> dict[str, Any]:
+        device = self._selected_zone_device(output_device)
+        zone = self._zone(device)
+        return await _PlaybackZone.set_equalizer(zone, bands) if device == "default" else await zone.set_equalizer(bands)
+
+    async def pause(self, output_device: str | None = None) -> dict[str, Any]:
+        device = self._selected_zone_device(output_device)
+        zone = self._zone(device)
+        return await _PlaybackZone.pause(zone) if device == "default" else await zone.pause()
+
+    async def resume(self, output_device: str | None = None) -> dict[str, Any]:
+        device = self._selected_zone_device(output_device)
+        zone = self._zone(device)
+        return await _PlaybackZone.resume(zone) if device == "default" else await zone.resume()
+
+    async def stop(self, output_device: str | None = None) -> dict[str, Any]:
+        device = self._selected_zone_device(output_device)
+        zone = self._zone(device)
+        return await _PlaybackZone.stop(zone) if device == "default" else await zone.stop()
+
+    async def stop_all(self) -> None:
+        for device, zone in list(self._zones.items()):
+            if device == "default":
+                await _PlaybackZone.stop(zone)
+            else:
+                await zone.stop()

@@ -68,7 +68,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         app.state.auth_manager.cancel_all()
-        await app.state.playback_manager.stop()
+        await app.state.playback_manager.stop_all()
 
 
 app = FastAPI(title="VK Music Server", version=VERSION, lifespan=lifespan)

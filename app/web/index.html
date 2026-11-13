@@ -54,6 +54,21 @@ select{min-width:220px;max-width:100%;border:1px solid #3b4c6d;border-radius:11p
 .msg{white-space:pre-wrap;margin-top:12px;color:#fca5a5}.ok{color:#86efac}
 small{display:block;color:var(--muted);margin-top:10px}
 @media(max-width:560px){body{padding:10px 8px 32px}.panel{padding:15px;border-radius:17px}#player{top:0;padding:11px;border-radius:16px}#nowPlaying{font-size:15px;margin-bottom:10px}#player .playerButtons{gap:6px}#player .playerButtons button{padding:7px 9px;font-size:12px}.trackRow{gap:8px}.trackRow button{padding:8px}.outputPicker{align-items:stretch}.outputPicker select{flex:1;min-width:0}.outputPicker button{margin:0}}
+
+#serverTimeline{margin-top:14px}
+#serverEqualizer{margin-top:14px;padding:13px;border:1px solid var(--line);border-radius:12px;background:#0d1628}
+.eqHeader{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+.eqHeader strong{font-size:14px}
+.eqGrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+.eqBand{display:flex;flex-direction:column;gap:7px;min-width:0;text-align:center}
+.eqBand label{font-size:12px;color:var(--muted)}
+.eqBand input{width:100%;padding:0;accent-color:var(--accent)}
+.eqBand output{font-size:11px;font-variant-numeric:tabular-nums;color:#cbd5e1}
+#activeZones{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.zoneStatus{display:flex;flex-direction:column;gap:3px;min-width:180px;max-width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:#0d1628;color:inherit;font:inherit;font-size:12px;text-align:left;cursor:pointer}
+.zoneStatus[aria-pressed="true"]{border-color:var(--accent);background:#16233b}
+.zoneStatus span{color:var(--muted);overflow-wrap:anywhere}
+@media(max-width:560px){.eqGrid{grid-template-columns:repeat(5,minmax(0,1fr));gap:7px}.eqBand label{font-size:10px}.zoneStatus{min-width:100%}}
 </style>
 </head>
 <body><main class="wrap"><section class="panel">
@@ -81,7 +96,8 @@ small{display:block;color:var(--muted);margin-top:10px}
     <button id="serverOutput" type="button" class="secondary">Вывод через HAOS</button>
   </div>
   <div class="outputPicker"><label for="audioOutput">Устройство вывода HAOS</label><select id="audioOutput"><option value="default">По умолчанию</option></select><button id="refreshOutputs" class="secondary" type="button">Обновить</button></div>
-  <small id="outputNotice">Доступны только устройства, опубликованные аудиослужбой Home Assistant.</small>
+  <small id="outputNotice">Выбор зоны влияет только на новые команды для неё. Уже запущенные браузерные и HAOS-потоки не прерываются.</small>
+  <div id="activeZones" aria-live="polite">Активные HAOS-зоны появятся здесь.</div>
   <div class="playerButtons" id="browserControls">
     <button id="previousTrack" type="button" class="secondary" aria-label="Предыдущий трек">Назад</button>
     <button id="nextTrack" type="button" class="secondary" aria-label="Следующий трек">Далее</button>
@@ -96,9 +112,24 @@ small{display:block;color:var(--muted);margin-top:10px}
   <canvas id="spectrumCanvas" data-bands="12" data-min-frequency="50" data-max-frequency="20000" data-fft-size="8192" data-sensitivity-db="0" data-height="87" data-segments="14" role="img" aria-label="Сегментный анализатор спектра: 12 частотных полос от 50 герц до 20 килогерц, от зелёного к красному"></canvas>
   <div id="browserTimeline" aria-label="Время воспроизведения">
     <div class="timelineTimes"><span id="elapsedTime">0:00</span><span id="totalTime">0:00</span></div>
-    <input id="timelineSeek" type="range" min="0" max="1" step="1" value="0" aria-label="Перемотка трека">
+    <input id="timelineSeek" type="range" min="0" max="1" step="1" value="0" aria-label="Перемотка трека в браузере">
   </div>
-  <div style="display:flex;align-items:center;gap:10px;margin-top:10px"><label for="volumeControl">Громкость</label><input id="volumeControl" type="range" min="0" max="100" value="80" style="width:130px"><output id="volumeValue">80%</output></div>
+  <div id="serverTimeline" hidden aria-label="Время воспроизведения HAOS">
+    <div class="timelineTimes"><span id="serverElapsedTime">0:00</span><span id="serverTotalTime">0:00</span></div>
+    <input id="serverTimelineSeek" type="range" min="0" max="1" step="1" value="0" aria-label="Перемотка трека HAOS">
+  </div>
+  <section id="serverEqualizer" hidden aria-label="Эквалайзер HAOS">
+    <div class="eqHeader"><strong>Эквалайзер выбранной зоны</strong><button id="serverEqReset" type="button" class="secondary">Сбросить</button></div>
+    <div class="eqGrid">
+      <div class="eqBand"><label for="eq_bass">Бас · 60 Hz</label><input id="eq_bass" type="range" min="-12" max="12" step="1" value="0"><output id="eq_bass_value">0 dB</output></div>
+      <div class="eqBand"><label for="eq_low_mid">Низ. середина</label><input id="eq_low_mid" type="range" min="-12" max="12" step="1" value="0"><output id="eq_low_mid_value">0 dB</output></div>
+      <div class="eqBand"><label for="eq_mid">Середина · 1 kHz</label><input id="eq_mid" type="range" min="-12" max="12" step="1" value="0"><output id="eq_mid_value">0 dB</output></div>
+      <div class="eqBand"><label for="eq_high_mid">Верх. середина</label><input id="eq_high_mid" type="range" min="-12" max="12" step="1" value="0"><output id="eq_high_mid_value">0 dB</output></div>
+      <div class="eqBand"><label for="eq_treble">ВЧ · 12 kHz</label><input id="eq_treble" type="range" min="-12" max="12" step="1" value="0"><output id="eq_treble_value">0 dB</output></div>
+    </div>
+    <small>Настройки применяются только к выбранному HAOS-выходу. При изменении эквалайзера поток этой зоны аккуратно перезапускается с текущей позиции.</small>
+  </section>
+  <div style="display:flex;align-items:center;gap:10px;margin-top:10px"><label for="volumeControl">Громкость выбранной зоны</label><input id="volumeControl" type="range" min="0" max="100" value="80" style="width:130px"><output id="volumeValue">80%</output></div>
   <audio id="audio" preload="none"></audio>
 </div>
 <h2>Музыка</h2>

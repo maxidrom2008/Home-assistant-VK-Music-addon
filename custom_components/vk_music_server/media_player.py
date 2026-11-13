@@ -48,6 +48,8 @@ class VKMusicServerMediaPlayer(MediaPlayerEntity):
         | MediaPlayerEntityFeature.PAUSE
         | MediaPlayerEntityFeature.STOP
         | MediaPlayerEntityFeature.PLAY_MEDIA
+        | MediaPlayerEntityFeature.SEEK
+        | MediaPlayerEntityFeature.VOLUME_SET
         | MediaPlayerEntityFeature.BROWSE_MEDIA
         | MediaPlayerEntityFeature.SEARCH_MEDIA
     )
@@ -72,6 +74,8 @@ class VKMusicServerMediaPlayer(MediaPlayerEntity):
         self._position = 0.0
         self._position_updated_at = datetime.now(timezone.utc)
         self._output = "Home Assistant Audio (PulseAudio)"
+        self._output_device = "default"
+        self._volume = 0.8
         self._error: str | None = None
 
     @property
@@ -81,6 +85,10 @@ class VKMusicServerMediaPlayer(MediaPlayerEntity):
     @property
     def state(self) -> MediaPlayerState:
         return self._state
+
+    @property
+    def volume_level(self) -> float | None:
+        return self._volume
 
     @property
     def media_title(self) -> str | None:
@@ -112,7 +120,7 @@ class VKMusicServerMediaPlayer(MediaPlayerEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return {"output": self._output, "mode": "server", "error": self._error}
+        return {"output": self._output, "output_device": self._output_device, "mode": "server", "error": self._error}
 
     async def async_update(self) -> None:
         """Refresh server playback state."""
@@ -136,22 +144,36 @@ class VKMusicServerMediaPlayer(MediaPlayerEntity):
         self._position = float(data.get("position") or 0)
         self._position_updated_at = datetime.now(timezone.utc)
         self._output = str(data.get("output") or "Home Assistant Audio (PulseAudio)")
+        self._output_device = str(data.get("output_device") or "default")
+        self._volume = float(data.get("volume", 0.8))
         self._error = data.get("error")
 
     async def async_media_play(self) -> None:
-        await self.api.post("playback/server/resume")
+        await self.api.post(f"playback/server/resume?output_device={self._output_device}")
         await self.async_update()
 
     async def async_media_pause(self) -> None:
-        await self.api.post("playback/server/pause")
+        await self.api.post(f"playback/server/pause?output_device={self._output_device}")
         await self.async_update()
 
     async def async_media_stop(self) -> None:
-        await self.api.post("playback/server/stop")
+        await self.api.post(f"playback/server/stop?output_device={self._output_device}")
         await self.async_update()
 
     async def async_turn_off(self) -> None:
         await self.async_media_stop()
+
+    async def async_media_seek(self, position: float) -> None:
+        await self.api.post("playback/server/seek", {
+            "position": max(0.0, float(position)), "output_device": self._output_device,
+        })
+        await self.async_update()
+
+    async def async_set_volume(self, volume: float) -> None:
+        await self.api.post("playback/volume", {
+            "volume": max(0.0, min(1.0, float(volume))), "output_device": self._output_device,
+        })
+        await self.async_update()
 
     async def async_play_media(
         self,
@@ -165,7 +187,12 @@ class VKMusicServerMediaPlayer(MediaPlayerEntity):
         track_id = media_id.removeprefix("track:")
         if not re.fullmatch(r"-?\d+_-?\d+", track_id):
             raise ValueError("Unsupported VK track id")
-        await self.api.post("playback/server/play", {"track_id": track_id})
+        requested_output = kwargs.get("output_device")
+        if isinstance(requested_output, str) and requested_output:
+            self._output_device = requested_output
+        await self.api.post("playback/server/play", {
+            "track_id": track_id, "output_device": self._output_device,
+        })
         await self.async_update()
 
     async def async_browse_media(

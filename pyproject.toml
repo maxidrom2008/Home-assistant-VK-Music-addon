@@ -1,6 +1,6 @@
 [project]
 name = "vk-music-server"
-version = "1.0.0rc21"
+version = "1.0.0rc22"
 description = "Standalone VK Music server Home Assistant add-on"
 requires-python = ">=3.12"
 

@@ -76,7 +76,7 @@ def test_manual_token_import_rejects_invalid_token_without_persisting(monkeypatc
     assert "не принимает" in response.json()["detail"]
 
 
-def test_deleting_token_stops_server_playback(monkeypatch) -> None:
+def test_deleting_token_stops_all_server_playback_zones(monkeypatch) -> None:
     import app.api.routes as routes
 
     stopped = []
@@ -88,7 +88,7 @@ def test_deleting_token_stops_server_playback(monkeypatch) -> None:
     monkeypatch.setattr(routes, "delete_credentials", lambda path: True)
 
     with TestClient(app) as client:
-        app.state.playback_manager.stop = fake_stop
+        app.state.playback_manager.stop_all = fake_stop
         response = client.delete("/api/v1/auth/token")
         assert stopped == [True]
 
