@@ -420,7 +420,7 @@ async def create_track_hls_session(track_id: str, request: Request) -> dict[str,
             url, str(credentials["user_agent"]), fingerprint
         )
         return {
-            "manifest_url": f"/api/v1/hls/{session_id}/{resource_id}",
+            "manifest_url": f"api/v1/hls/{session_id}/{resource_id}",
             "session_id": session_id,
         }
     except (ValueError, HlsProxyError) as exc:
