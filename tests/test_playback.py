@@ -193,9 +193,9 @@ def test_set_volume_targets_the_selected_sink_or_the_default(monkeypatch: pytest
     async def scenario():
         player = ServerPlaybackManager()
         player._output_device = "selected_sink"
-        assert await player.set_volume(0.35) == {"volume": 0.35}
+        assert await player.set_volume(0.35) == {"volume": 0.35, "output_device": "selected_sink"}
         player._output_device = "default"
-        assert await player.set_volume(0.6) == {"volume": 0.6}
+        assert await player.set_volume(0.6) == {"volume": 0.6, "output_device": "default"}
 
         assert posted == [
             {"index": 2, "volume": 0.35},
@@ -240,7 +240,7 @@ def test_set_volume_falls_back_to_pactl_when_supervisor_is_unavailable(
     async def scenario():
         player = ServerPlaybackManager()
         player._output_device = "selected_sink"
-        assert await player.set_volume(0.45) == {"volume": 0.45}
+        assert await player.set_volume(0.45) == {"volume": 0.45, "output_device": "selected_sink"}
         assert captured == [
             ("pactl", "set-sink-volume", "selected_sink", "45%")
         ]
