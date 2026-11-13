@@ -34,6 +34,7 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
   });
   const { window } = dom;
   const calls = [];
+  const serverZones = new Map();
   const track = {
     id: "123_456",
     title: "Regression Test Track",
@@ -77,31 +78,67 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
       });
     }
     if (path === "playback/state") {
-      return jsonResponse({ state: "idle", mode: "server", track: null, position: 0 });
-    }
-    if (path === "playback/server/play") {
-      return jsonResponse({
-        state: "playing",
-        mode: "server",
-        track,
-        position: 0,
-        output: "Test speaker",
+      const device = url.searchParams.get("output_device") || "default";
+      return jsonResponse(serverZones.get(device) || {
+        state: "idle", mode: "server", track: null, position: 0, output_device: device,
       });
     }
+    if (path === "playback/states") {
+      return jsonResponse({ zones: [...serverZones.values()] });
+    }
+    if (path === "playback/server/play") {
+      const body = JSON.parse(options.body || "{}");
+      const device = body.output_device || "default";
+      const state = {
+        state: "playing", mode: "server", track, position: 0,
+        output: device === "default" ? "По умолчанию" : "Test speaker",
+        output_device: device, volume: 0.8,
+        equalizer: { bass: 0, low_mid: 0, mid: 0, high_mid: 0, treble: 0 },
+      };
+      serverZones.set(device, state);
+      return jsonResponse(state);
+    }
+    if (path === "playback/server/seek") {
+      const body = JSON.parse(options.body || "{}");
+      const state = serverZones.get(body.output_device || "default");
+      state.position = body.position;
+      serverZones.set(body.output_device || "default", state);
+      return jsonResponse(state);
+    }
+    if (path === "playback/server/equalizer") {
+      const body = JSON.parse(options.body || "{}");
+      const state = serverZones.get(body.output_device || "default");
+      state.equalizer = Object.fromEntries(["bass", "low_mid", "mid", "high_mid", "treble"].map((band) => [band, body[band]]));
+      serverZones.set(body.output_device || "default", state);
+      return jsonResponse(state);
+    }
     if (path === "playback/server/pause") {
-      return jsonResponse({ state: "paused", mode: "server", track, position: 10 });
+      const device = url.searchParams.get("output_device") || "default";
+      const state = serverZones.get(device);
+      state.state = "paused";
+      state.position = 10;
+      return jsonResponse(state);
     }
     if (path === "playback/server/resume") {
-      return jsonResponse({ state: "playing", mode: "server", track, position: 10 });
+      const device = url.searchParams.get("output_device") || "default";
+      const state = serverZones.get(device);
+      state.state = "playing";
+      state.position = 10;
+      return jsonResponse(state);
     }
     if (path === "playback/server/stop") {
-      return jsonResponse({ state: "idle", mode: "server", track: null, position: 0 });
+      const device = url.searchParams.get("output_device") || "default";
+      const state = serverZones.get(device) || {};
+      state.state = "idle";
+      state.track = null;
+      state.position = 0;
+      return jsonResponse(state);
     }
     if (path === "playback/output") {
       return jsonResponse({ selected: "selected_sink", name: "Test speaker" });
     }
     if (path === "playback/volume") {
-      return jsonResponse({ volume: 0.5 });
+      return jsonResponse({ volume: 0.5, output_device: "default" });
     }
     return jsonResponse({ detail: `Unexpected test request: ${method} ${path}` }, 404);
   };
@@ -280,6 +317,41 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
     assert.equal(window.document.getElementById("serverPause").hidden, false);
     assert.equal(window.document.getElementById("nowPlaying").textContent.includes(track.title), true);
     assert.equal(paused, false, "HAOS playback and browser playback may run simultaneously");
+
+    const serverSeek = window.document.getElementById("serverTimelineSeek");
+    serverSeek.value = "45";
+    serverSeek.dispatchEvent(new window.Event("input", { bubbles: true }));
+    serverSeek.dispatchEvent(new window.Event("change", { bubbles: true }));
+    await waitFor(
+      () => calls.some((call) => call.path === "playback/server/seek"),
+      "HAOS seek request",
+    );
+    assert.equal(JSON.parse(calls.findLast((call) => call.path === "playback/server/seek").body).position, 45);
+
+    const bass = window.document.getElementById("eq_bass");
+    bass.value = "5";
+    bass.dispatchEvent(new window.Event("change", { bubbles: true }));
+    await waitFor(
+      () => calls.some((call) => call.path === "playback/server/equalizer"),
+      "HAOS equalizer request",
+    );
+    assert.equal(JSON.parse(calls.findLast((call) => call.path === "playback/server/equalizer").body).bass, 5);
+
+    const output = window.document.getElementById("audioOutput");
+    output.value = "selected_sink";
+    output.dispatchEvent(new window.Event("change", { bubbles: true }));
+    await waitFor(
+      () => calls.some((call) => call.path === "playback/output"),
+      "HAOS output selection",
+    );
+    window.document.querySelector("#trackList button").click();
+    await waitFor(
+      () => serverZones.has("selected_sink"),
+      "second HAOS playback zone",
+    );
+    assert.equal(serverZones.has("default"), true, "first HAOS zone remains active");
+    assert.equal(serverZones.get("default").state, "playing");
+    assert.equal(paused, false, "switching outputs must not stop browser playback");
     assert.ok(appJs.includes("playback/server/seek"));
     assert.ok(appJs.includes("playback/server/equalizer"));
   } finally {
