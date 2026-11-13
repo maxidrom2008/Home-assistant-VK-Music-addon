@@ -46,7 +46,7 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
     const url = new URL(String(input), window.document.baseURI);
     const path = url.pathname.split("/api/v1/").pop() || "";
     const method = options.method || "GET";
-    calls.push({ path, method, body: options.body });
+    calls.push({ path, method, body: options.body, outputDevice: url.searchParams.get("output_device") });
 
     if (path === "auth/status") {
       return jsonResponse({
@@ -341,8 +341,8 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
     output.value = "selected_sink";
     output.dispatchEvent(new window.Event("change", { bubbles: true }));
     await waitFor(
-      () => calls.some((call) => call.path === "playback/output"),
-      "HAOS output selection",
+      () => calls.some((call) => call.path === "playback/state" && call.outputDevice === "selected_sink"),
+      "selected HAOS zone state",
     );
     window.document.querySelector("#trackList button").click();
     await waitFor(
