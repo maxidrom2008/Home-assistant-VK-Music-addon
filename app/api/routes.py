@@ -77,7 +77,7 @@ class PlaybackOutputRequest(BaseModel):
 
 class PlaybackVolumeRequest(BaseModel):
     volume: float = Field(ge=0.0, le=1.0)
-    output_device: str = Field(default="default", min_length=1, max_length=512)
+    output_device: str | None = Field(default=None, min_length=1, max_length=512)
 
 
 @router.get("/integration/info")
