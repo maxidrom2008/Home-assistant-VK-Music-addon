@@ -179,7 +179,7 @@ function applyServerPlaybackState(state) {
       const output = $("eq_" + name + "_value");
       if (output) output.textContent = (Number(bands[name]) || 0) + " dB";
     }
-    $("volumeControl").value = String(Math.round((Number(state.volume) || 0.8) * 100));
+    $("volumeControl").value = String(Math.round((state.volume == null ? 0.8 : Number(state.volume)) * 100));
     $("volumeValue").textContent = $("volumeControl").value + "%";
     renderServerTimeline();
     if (serverTimelineFrame) cancelAnimationFrame(serverTimelineFrame);
@@ -653,19 +653,19 @@ async function playTrack(index, targetMode = outputMode) {
 
   browserTrackIndex = index;
   currentBrowserTrackId = String(track.id);
-  $("nowPlaying").textContent = (track.artist ? track.artist + " — " : "") + (track.title || "Без названия");
+  if (outputMode === "browser") $("nowPlaying").textContent = (track.artist ? track.artist + " — " : "") + (track.title || "Без названия");
   startBrowserTimeline(track.duration);
   const audio = $("audio");
   destroyBrowserHls();
   try {
     const usedHls = await startHlsBrowserStream(track);
     if (!usedHls) await startLegacyBrowserStream(track);
-    $("outputStatus").textContent = "Воспроизведение в браузере";
+    if (outputMode === "browser") $("outputStatus").textContent = "Воспроизведение в браузере";
   } catch (err) {
     destroyBrowserHls();
     try {
       await startLegacyBrowserStream(track);
-      $("outputStatus").textContent = "HLS недоступен — включён резервный FFmpeg-поток";
+      if (outputMode === "browser") $("outputStatus").textContent = "HLS недоступен — включён резервный FFmpeg-поток";
     } catch (fallbackError) {
       $("libraryMessage").textContent = "Не удалось начать воспроизведение: " + (fallbackError.message || err.message || String(err));
     }
