@@ -38,7 +38,7 @@ button:disabled{opacity:.5;cursor:wait}
 .outputPicker{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}
 .outputPicker label{margin:0;color:var(--muted);font-size:13px;font-weight:650}
 select{min-width:220px;max-width:100%;border:1px solid #3b4c6d;border-radius:11px;background:#0d1628;color:#edf2ff;padding:10px 12px;font:inherit}
-#outputStatus{margin:12px 0 0;font-size:13px}
+#outputStatus{margin:12px 0 0;font-size:13px}\n#spectrumCanvas{display:block;width:100%;height:58px;margin:10px 0 0;border-radius:8px;opacity:.95}
 #browserTimeline{margin-top:14px}
 .timelineTimes{display:flex;justify-content:space-between;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums;margin-bottom:7px}
 #timelineSeek{display:block;width:100%;height:22px;padding:0;margin:0;accent-color:var(--accent);cursor:pointer;background:transparent;border:0;touch-action:pan-y}
@@ -88,7 +88,7 @@ small{display:block;color:var(--muted);margin-top:10px}
     <button id="serverResume" type="button" class="secondary" hidden>Продолжить сервер</button>
     <button id="serverStop" type="button" class="danger" hidden>Остановить сервер</button>
   </div>
-  <p id="outputStatus" class="muted">Воспроизведение в этом браузере</p>
+  <p id="outputStatus" class="muted">Воспроизведение в этом браузере</p>\n  <canvas id="spectrumCanvas" data-bands="12" data-min-frequency="50" data-max-frequency="20000" role="img" aria-label="Анализатор спектра: 12 частотных полос от 50 герц до 20 килогерц"></canvas>
   <div id="browserTimeline" aria-label="Время воспроизведения">
     <div class="timelineTimes"><span id="elapsedTime">0:00</span><span id="totalTime">0:00</span></div>
     <input id="timelineSeek" type="range" min="0" max="1" step="1" value="0" aria-label="Перемотка трека">
