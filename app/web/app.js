@@ -13,7 +13,16 @@ let currentMode = "library";
 let hasMoreTracks = false;
 let loadSequence = 0;
 let currentTrackIndex = -1;
+let browserTrackIndex = -1;
 let outputMode = "browser";
+let selectedOutputDevice = "default";
+let serverPlaybackState = { state: "idle", track: null, position: 0, output_device: "default" };
+let serverTrackDuration = 0;
+let serverPosition = 0;
+let serverPositionMark = null;
+let serverTimelineFrame = 0;
+let serverSeeking = false;
+let serverSeekRequestId = 0;
 let currentPlaylistId = null;
 let eventReconnectDelay = 3000;
 let eventSocket = null;
@@ -137,23 +146,95 @@ function startSpectrum() {
 }
 
 function applyServerPlaybackState(state) {
-  if (!state || outputMode !== "server") return;
+  if (!state) return;
+  const device = String(state.output_device || "default");
+  if (device !== selectedOutputDevice) return;
+  serverPlaybackState = state;
+  serverTrackDuration = Math.max(0, Number(state.track?.duration) || 0);
+  serverPosition = Math.max(0, Number(state.position) || 0);
+  serverPositionMark = state.state === "playing" ? Date.now() : null;
   if (state.track) {
-    $("nowPlaying").textContent = (state.track.artist ? state.track.artist + " — " : "") + (state.track.title || "Без названия");
-  } else if (state.state === "idle") {
+    const label = (state.track.artist ? state.track.artist + " — " : "") + (state.track.title || "Без названия");
+    if (outputMode === "server") $("nowPlaying").textContent = label;
+    currentTrackIndex = currentItems.findIndex(item => String(item.id) === String(state.track.id));
+  } else if (state.state === "idle" && outputMode === "server") {
     $("nowPlaying").textContent = "Ничего не воспроизводится";
     currentTrackIndex = -1;
   }
-  $("outputStatus").textContent = state.state === "playing"
-    ? "Играет через HAOS · " + (state.output || "PulseAudio")
-    : state.state === "paused"
-      ? "Серверный плеер на паузе"
-      : state.state === "error"
-        ? (state.error || "Ошибка серверного вывода")
-        : "Серверный плеер остановлен";
-  $("serverPause").hidden = state.state !== "playing";
-  $("serverResume").hidden = state.state !== "paused";
-  $("serverStop").hidden = !["playing", "paused"].includes(state.state);
+  if (outputMode === "server") {
+    $("outputStatus").textContent = state.state === "playing"
+      ? "Играет через HAOS · " + (state.output || "PulseAudio")
+      : state.state === "paused"
+        ? "Зона на паузе · " + (state.output || "HAOS")
+        : state.state === "error"
+          ? (state.error || "Ошибка серверного вывода")
+          : "Зона остановлена · " + (state.output || "HAOS");
+    $("serverPause").hidden = state.state !== "playing";
+    $("serverResume").hidden = state.state !== "paused";
+    $("serverStop").hidden = !["playing", "paused"].includes(state.state);
+    const bands = state.equalizer || {};
+    for (const name of ["bass", "low_mid", "mid", "high_mid", "treble"]) {
+      const input = $("eq_" + name);
+      if (input && !input.matches(":active")) input.value = String(Number(bands[name]) || 0);
+      const output = $("eq_" + name + "_value");
+      if (output) output.textContent = (Number(bands[name]) || 0) + " dB";
+    }
+    $("volumeControl").value = String(Math.round((Number(state.volume) || 0.8) * 100));
+    $("volumeValue").textContent = $("volumeControl").value + "%";
+    renderServerTimeline();
+    if (serverTimelineFrame) cancelAnimationFrame(serverTimelineFrame);
+    serverTimelineFrame = 0;
+    if (state.state === "playing") serverTimelineFrame = requestAnimationFrame(updateServerTimeline);
+  }
+}
+
+function renderServerTimeline() {
+  const seek = $("serverTimelineSeek");
+  if (!seek) return;
+  const elapsed = serverPosition + (serverPositionMark ? Math.max(0, Date.now() - serverPositionMark) / 1000 : 0);
+  seek.disabled = outputMode !== "server" || !serverPlaybackState.track || serverTrackDuration <= 0;
+  seek.max = String(Math.max(1, Math.ceil(serverTrackDuration)));
+  if (!serverSeeking) {
+    seek.value = String(Math.min(Math.floor(elapsed), Number(seek.max)));
+    $("serverElapsedTime").textContent = formatDuration(elapsed);
+  }
+  $("serverTotalTime").textContent = formatDuration(serverTrackDuration);
+}
+
+function updateServerTimeline() {
+  renderServerTimeline();
+  if (serverTimelineFrame) cancelAnimationFrame(serverTimelineFrame);
+  serverTimelineFrame = 0;
+  if (outputMode === "server" && serverPlaybackState.state === "playing") {
+    serverTimelineFrame = requestAnimationFrame(updateServerTimeline);
+  }
+}
+
+async function refreshPlaybackZones() {
+  try {
+    const data = await call("playback/states");
+    const host = $("activeZones");
+    if (!host) return;
+    const active = (data.zones || []).filter(zone => ["playing", "paused", "error"].includes(zone.state));
+    host.replaceChildren();
+    if (!active.length) {
+      host.textContent = "Сейчас нет активных HAOS-зон.";
+      return;
+    }
+    for (const zone of active) {
+      const item = document.createElement("div");
+      item.className = "zoneStatus";
+      const name = document.createElement("strong");
+      name.textContent = zone.output || zone.output_device || "HAOS";
+      const detail = document.createElement("span");
+      const track = zone.track ? [zone.track.artist, zone.track.title].filter(Boolean).join(" — ") : "Нет трека";
+      detail.textContent = track + " · " + (zone.state === "playing" ? "играет" : zone.state === "paused" ? "пауза" : "ошибка");
+      item.append(name, detail);
+      host.append(item);
+    }
+  } catch (err) {
+    // Keep the player usable with older servers while the add-on is updating.
+  }
 }
 
 function connectEvents() {
@@ -168,7 +249,10 @@ function connectEvents() {
     socket.addEventListener("message", event => {
       try {
         const message = JSON.parse(event.data);
-        if (message.type === "playback.state") applyServerPlaybackState(message.data);
+        if (message.type === "playback.state") {
+          applyServerPlaybackState(message.data);
+          refreshPlaybackZones();
+        }
       } catch (err) {}
     });
     socket.addEventListener("close", () => {
@@ -545,37 +629,32 @@ async function loadTracks(mode="library", append=false) {
     $("libraryMessage").textContent = err.message;
   }
 }
-async function playTrack(index) {
+async function playTrack(index, targetMode = outputMode) {
   const track = currentItems[index];
   if (!track || !track.id) return;
   currentTrackIndex = index;
-  currentBrowserTrackId = String(track.id);
-  $("nowPlaying").textContent = (track.artist ? track.artist + " — " : "") + (track.title || "Без названия");
-  startBrowserTimeline(track.duration);
-  if (outputMode === "server") {
-    stopBrowserTimeline();
-    $("browserTimeline").hidden = true;
-    $("audio").pause();
-    destroyBrowserHls();
-    $("audio").removeAttribute("src");
+  if (targetMode === "server") {
     try {
       const state = await call("playback/server/play", {
-        method:"POST",
-        body:JSON.stringify({track_id:track.id})
+        method: "POST",
+        body: JSON.stringify({ track_id: track.id, output_device: selectedOutputDevice }),
       });
       applyServerPlaybackState(state);
-      $("outputStatus").textContent = state.state === "playing"
-        ? "Играет через HAOS · " + (state.output || "PulseAudio")
-        : (state.error || "Серверный вывод не начал воспроизведение");
       $("libraryMessage").textContent = state.state === "playing"
-        ? "Серверное воспроизведение запущено."
-        : "Сервер не смог начать воспроизведение.";
+        ? "Трек запущен в зоне «" + (state.output || selectedOutputDevice) + "». Другие зоны продолжают играть."
+        : (state.error || "Сервер не смог начать воспроизведение.");
+      await refreshPlaybackZones();
     } catch (err) {
       $("libraryMessage").textContent = err.message;
       $("outputStatus").textContent = "Серверный вывод недоступен. Проверьте аудиовыход add-on.";
     }
     return;
   }
+
+  browserTrackIndex = index;
+  currentBrowserTrackId = String(track.id);
+  $("nowPlaying").textContent = (track.artist ? track.artist + " — " : "") + (track.title || "Без названия");
+  startBrowserTimeline(track.duration);
   const audio = $("audio");
   destroyBrowserHls();
   try {
@@ -615,7 +694,9 @@ async function refreshAudioOutputs() {
     }
     select.value = data.selected || previous || "default";
     if (!select.value) select.value = "default";
+    selectedOutputDevice = select.value;
     select.disabled = false;
+    await refreshPlaybackZones();
   } catch (err) {
     select.disabled = true;
     $("outputStatus").textContent = "Не удалось получить устройства HAOS: " + err.message;
@@ -626,7 +707,11 @@ async function setAudioOutput(device) {
     const selected = await call("playback/output", {
       method:"POST", body:JSON.stringify({device})
     });
-    $("outputStatus").textContent = "Выход HAOS: " + selected.name + ". Применится к следующему запуску трека.";
+    selectedOutputDevice = selected.selected || device;
+    $("outputStatus").textContent = "Активная зона: " + selected.name + ". Переключение не останавливает другие зоны.";
+    const state = await call("playback/state?output_device=" + encodeURIComponent(selectedOutputDevice));
+    applyServerPlaybackState(state);
+    await refreshPlaybackZones();
   } catch (err) {
     $("outputStatus").textContent = err.message;
     await refreshAudioOutputs();
@@ -636,57 +721,109 @@ async function setOutputMode(mode) {
   outputMode = mode;
   $("browserOutput").className = mode === "browser" ? "" : "secondary";
   $("serverOutput").className = mode === "server" ? "" : "secondary";
-  $("audio").hidden = false;
-  $("browserTimeline").hidden = mode === "server";
+  $("browserTimeline").hidden = mode !== "browser" || !currentBrowserTrackId;
+  $("serverTimeline").hidden = mode !== "server";
+  $("serverEqualizer").hidden = mode !== "server";
   $("spectrumCanvas").hidden = mode === "server";
-  $("browserControls").hidden = mode === "server"; $("volumeControl").value = String(Math.round(playbackVolume*100)); $("audio").volume = playbackVolume;
-  if (mode === "server") stopBrowserTimeline();
-  $("serverPause").hidden = true; $("serverResume").hidden = true; $("serverStop").hidden = true;
-  if (mode === "server") {
-    $("audio").pause();
-    destroyBrowserHls();
-    browserPlaybackMode = "legacy";
-    await refreshAudioOutputs();
-    $("outputStatus").textContent = "Следующий выбранный трек будет играть через аудиовыход HAOS.";
-    try {
-      const state = await call("playback/state");
-      applyServerPlaybackState(state);
-    } catch (err) {
-      $("outputStatus").textContent = err.message;
-    }
-  } else {
-    try { await call("playback/server/stop", {method:"POST"}); } catch (e) {}
-    $("outputStatus").textContent = "Воспроизведение в этом браузере";
+  $("browserControls").hidden = mode === "server";
+  $("browserPause").hidden = mode !== "browser" || $("audio").paused;
+  $("browserResume").hidden = mode !== "browser" || !$("audio").paused || !$("audio").src;
+  $("browserStop").hidden = mode !== "browser" || !$("audio").src;
+  if (mode === "browser") {
+    $("serverPause").hidden = true;
+    $("serverResume").hidden = true;
+    $("serverStop").hidden = true;
+    $("volumeControl").value = String(Math.round(playbackVolume * 100));
+    $("volumeValue").textContent = Math.round(playbackVolume * 100) + "%";
+    $("audio").volume = playbackVolume;
+    if (!$("audio").paused && !timelineFrame) timelineFrame = requestAnimationFrame(updateBrowserTimeline);
+    if (!$("audio").paused) startSpectrum();
+    $("outputStatus").textContent = "Браузерная зона. Потоки HAOS продолжают играть независимо.";
+    const track = currentItems[browserTrackIndex];
+    if (track) $("nowPlaying").textContent = (track.artist ? track.artist + " — " : "") + (track.title || "Без названия");
+    renderBrowserTimeline();
+    return;
   }
+
+  await refreshAudioOutputs();
+  $("outputStatus").textContent = "Выбрана HAOS-зона. Браузер и остальные выходы продолжают играть.";
+  try {
+    const state = await call("playback/state?output_device=" + encodeURIComponent(selectedOutputDevice));
+    applyServerPlaybackState(state);
+  } catch (err) {
+    $("outputStatus").textContent = err.message;
+  }
+  await refreshPlaybackZones();
 }
 async function serverPlaybackAction(action) {
   try {
-    const state = await call("playback/server/" + action, {method:"POST"});
+    const state = await call(
+      "playback/server/" + action + "?output_device=" + encodeURIComponent(selectedOutputDevice),
+      { method: "POST" },
+    );
+    applyServerPlaybackState(state);
     $("outputStatus").textContent = action === "pause"
-      ? "Серверный плеер на паузе"
+      ? "Пауза · " + (state.output || "HAOS")
       : action === "resume"
-        ? "Серверный плеер продолжил воспроизведение"
-        : "Серверный плеер остановлен";
-    if (action === "stop") {
-      $("nowPlaying").textContent = "Ничего не воспроизводится";
-      currentTrackIndex = -1;
-    }
+        ? "Продолжает играть · " + (state.output || "HAOS")
+        : "Зона остановлена · " + (state.output || "HAOS");
+    await refreshPlaybackZones();
     return state;
   } catch (err) {
     $("libraryMessage").textContent = err.message;
   }
 }
-async function playNext() {
-  const nextIndex = currentTrackIndex + 1;
-  if (nextIndex < currentItems.length) return playTrack(nextIndex);
+
+async function seekServerStream(seconds) {
+  const requestId = ++serverSeekRequestId;
+  const target = Math.max(0, Math.min(serverTrackDuration, Number(seconds) || 0));
+  try {
+    const state = await call("playback/server/seek", {
+      method: "POST",
+      body: JSON.stringify({ position: target, output_device: selectedOutputDevice }),
+    });
+    if (requestId === serverSeekRequestId) applyServerPlaybackState(state);
+  } catch (err) {
+    $("libraryMessage").textContent = "Не удалось перемотать HAOS-поток: " + err.message;
+  } finally {
+    if (requestId === serverSeekRequestId) {
+      serverSeeking = false;
+      renderServerTimeline();
+    }
+  }
+}
+
+async function updateServerEqualizer() {
+  const bands = {};
+  for (const name of ["bass", "low_mid", "mid", "high_mid", "treble"]) {
+    bands[name] = Number($("eq_" + name).value) || 0;
+    $("eq_" + name + "_value").textContent = bands[name] + " dB";
+  }
+  try {
+    const state = await call("playback/server/equalizer", {
+      method: "POST",
+      body: JSON.stringify({ output_device: selectedOutputDevice, ...bands }),
+    });
+    applyServerPlaybackState(state);
+    await refreshPlaybackZones();
+  } catch (err) {
+    $("libraryMessage").textContent = "Не удалось применить эквалайзер: " + err.message;
+  }
+}
+
+async function playNext(targetMode = outputMode) {
+  const currentIndex = targetMode === "browser" ? browserTrackIndex : currentTrackIndex;
+  const nextIndex = currentIndex + 1;
+  if (nextIndex < currentItems.length) return playTrack(nextIndex, targetMode);
   if (hasMoreTracks) {
     const previousLength = currentItems.length;
     await loadTracks(currentMode, true);
-    if (currentItems.length > previousLength) return playTrack(previousLength);
+    if (currentItems.length > previousLength) return playTrack(previousLength, targetMode);
   }
 }
 function playPrevious() {
-  if (currentTrackIndex > 0) playTrack(currentTrackIndex - 1);
+  const currentIndex = outputMode === "browser" ? browserTrackIndex : currentTrackIndex;
+  if (currentIndex > 0) playTrack(currentIndex - 1, outputMode);
 }
 async function showChallenge(data) {
   await destroyCaptchaWidget();
@@ -877,7 +1014,43 @@ $("timelineSeek").addEventListener("change", event => {
 });
 $("timelineSeek").addEventListener("pointercancel", () => { timelineSeeking = false; renderBrowserTimeline(); });
 $("timelineSeek").addEventListener("blur", () => { if (timelineSeeking) { timelineSeeking = false; renderBrowserTimeline(); } });
-$("volumeControl").addEventListener("input",async e=>{playbackVolume=Math.max(0,Math.min(1,Number(e.target.value)/100));$("volumeValue").textContent=Math.round(playbackVolume*100)+"%";$("audio").volume=playbackVolume;if(outputMode==="server"){try{await call("playback/volume",{method:"POST",body:JSON.stringify({volume:playbackVolume})});}catch(err){$("outputStatus").textContent="Ошибка громкости: "+err.message;}}});
+
+$("serverTimelineSeek").addEventListener("pointerdown", () => { serverSeeking = true; });
+$("serverTimelineSeek").addEventListener("input", event => {
+  serverSeeking = true;
+  $("serverElapsedTime").textContent = formatDuration(Number(event.target.value) || 0);
+});
+$("serverTimelineSeek").addEventListener("change", event => {
+  if (outputMode === "server" && serverPlaybackState.track) seekServerStream(event.target.value);
+});
+$("serverTimelineSeek").addEventListener("pointercancel", () => { serverSeeking = false; renderServerTimeline(); });
+$("serverTimelineSeek").addEventListener("blur", () => { if (serverSeeking) { serverSeeking = false; renderServerTimeline(); } });
+
+for (const name of ["bass", "low_mid", "mid", "high_mid", "treble"]) {
+  $("eq_" + name).addEventListener("change", updateServerEqualizer);
+}
+$("serverEqReset").addEventListener("click", () => {
+  for (const name of ["bass", "low_mid", "mid", "high_mid", "treble"]) $("eq_" + name).value = "0";
+  updateServerEqualizer();
+});
+$("volumeControl").addEventListener("input", async e => {
+  const value = Math.max(0, Math.min(1, Number(e.target.value) / 100));
+  $("volumeValue").textContent = Math.round(value * 100) + "%";
+  if (outputMode === "server") {
+    try {
+      const state = await call("playback/volume", {
+        method: "POST",
+        body: JSON.stringify({ volume: value, output_device: selectedOutputDevice }),
+      });
+      applyServerPlaybackState({ ...serverPlaybackState, ...state });
+    } catch (err) {
+      $("outputStatus").textContent = "Ошибка громкости: " + err.message;
+    }
+  } else {
+    playbackVolume = value;
+    $("audio").volume = playbackVolume;
+  }
+});
 $("audioOutput").addEventListener("change", event => setAudioOutput(event.target.value));
 $("refreshOutputs").addEventListener("click", refreshAudioOutputs);
 $("audio").addEventListener("play", () => { $("browserPause").hidden = false; $("browserResume").hidden = true; $("browserStop").hidden = false; if (outputMode === "browser" && !timelineFrame) timelineFrame = requestAnimationFrame(updateBrowserTimeline); startSpectrum(); });
@@ -895,12 +1068,12 @@ $("audio").addEventListener("pause", () => { stopBrowserTimeline(); stopSpectrum
 $("audio").addEventListener("ended", () => {
   stopBrowserTimeline();
   $("elapsedTime").textContent = formatDuration(browserTrackDuration);
-  playNext();
+  playNext("browser");
 });
 $("audio").addEventListener("error", () => {
   stopBrowserTimeline();
   if ($("audio").src && browserPlaybackMode === "hls") {
-    const track = currentItems[currentTrackIndex];
+    const track = currentItems[browserTrackIndex];
     const position = $("audio").currentTime || 0;
     if (track) {
       startLegacyBrowserStream(track, position).then(() => {
