@@ -265,6 +265,11 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
       "server playback state",
     );
     assert.equal(window.document.getElementById("browserTimeline").hidden, true);
+    assert.equal(window.document.getElementById("serverTimeline").hidden, false);
+    assert.equal(window.document.getElementById("serverEqualizer").hidden, false);
+    assert.equal(paused, false, "switching to HAOS must not stop the browser stream");
+    assert.ok(audio.src.includes("start=75.000"), "browser source URL must stay attached");
+    assert.equal(calls.some((call) => call.path === "playback/server/stop"), false);
 
     window.document.querySelector("#trackList button").click();
     await waitFor(
@@ -274,6 +279,9 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
     );
     assert.equal(window.document.getElementById("serverPause").hidden, false);
     assert.equal(window.document.getElementById("nowPlaying").textContent.includes(track.title), true);
+    assert.equal(paused, false, "HAOS playback and browser playback may run simultaneously");
+    assert.ok(appJs.includes("playback/server/seek"));
+    assert.ok(appJs.includes("playback/server/equalizer"));
   } finally {
     dom.window.close();
   }
