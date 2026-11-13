@@ -54,6 +54,21 @@ class TokenImport(BaseModel):
 
 class ServerPlaybackRequest(BaseModel):
     track_id: str = Field(pattern=r"^-?[0-9]+_-?[0-9]+$", max_length=64)
+    output_device: str = Field(default="default", min_length=1, max_length=512)
+
+
+class ServerPlaybackSeekRequest(BaseModel):
+    position: float = Field(ge=0.0, le=86400.0)
+    output_device: str = Field(default="default", min_length=1, max_length=512)
+
+
+class ServerPlaybackEqualizerRequest(BaseModel):
+    output_device: str = Field(default="default", min_length=1, max_length=512)
+    bass: float = Field(default=0.0, ge=-12.0, le=12.0)
+    low_mid: float = Field(default=0.0, ge=-12.0, le=12.0)
+    mid: float = Field(default=0.0, ge=-12.0, le=12.0)
+    high_mid: float = Field(default=0.0, ge=-12.0, le=12.0)
+    treble: float = Field(default=0.0, ge=-12.0, le=12.0)
 
 
 class PlaybackOutputRequest(BaseModel):
@@ -62,6 +77,7 @@ class PlaybackOutputRequest(BaseModel):
 
 class PlaybackVolumeRequest(BaseModel):
     volume: float = Field(ge=0.0, le=1.0)
+    output_device: str = Field(default="default", min_length=1, max_length=512)
 
 
 @router.get("/integration/info")
@@ -308,13 +324,24 @@ async def playback_select_output(
 
 @router.post("/playback/volume")
 async def playback_set_volume(payload: PlaybackVolumeRequest, request: Request) -> dict[str, object]:
-    try: return await request.app.state.playback_manager.set_volume(payload.volume)
-    except PlaybackError as exc: raise HTTPException(status_code=503, detail=str(exc)) from exc
+    try:
+        return await request.app.state.playback_manager.set_volume(
+            payload.volume, output_device=payload.output_device
+        )
+    except PlaybackError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.get("/playback/state")
-async def playback_state(request: Request) -> dict[str, object]:
-    return request.app.state.playback_manager.get_state()
+async def playback_state(
+    request: Request, output_device: str | None = Query(default=None, max_length=512)
+) -> dict[str, object]:
+    return request.app.state.playback_manager.get_state(output_device)
+
+
+@router.get("/playback/states")
+async def playback_states(request: Request) -> dict[str, object]:
+    return {"zones": request.app.state.playback_manager.get_states()}
 
 
 @router.post("/playback/server/play")
@@ -331,6 +358,7 @@ async def playback_server_play(
             resolved["stream_url"],
             credentials["user_agent"],
             resolved["track"],
+            output_device=payload.output_device,
         )
         await _publish_event(request, "playback.state", state)
         return state
@@ -344,10 +372,72 @@ async def playback_server_play(
         raise HTTPException(status_code=502, detail=f"VK API error {getattr(exc, 'error_code', 'unknown')}") from exc
 
 
-@router.post("/playback/server/pause")
-async def playback_server_pause(request: Request) -> dict[str, object]:
+async def _restart_server_zone(
+    request: Request, output_device: str, position: float, equalizer: dict[str, float] | None = None
+) -> dict[str, object]:
+    credentials = get_credentials(request.app.state.database_path)
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Сначала подключите VK")
+    manager = request.app.state.playback_manager
+    current = manager.get_state(output_device)
+    track = current.get("track")
+    if not isinstance(track, dict) or not track.get("id"):
+        raise HTTPException(status_code=409, detail="В этой зоне сейчас нет активного трека")
     try:
-        state = await request.app.state.playback_manager.pause()
+        if equalizer is not None:
+            await manager.set_equalizer(equalizer, output_device)
+        resolved = await resolve_track(make_service(credentials), str(track["id"]))
+        duration = max(0.0, float(resolved["track"].get("duration") or 0))
+        target = min(max(0.0, float(position)), duration) if duration else max(0.0, float(position))
+        state = await manager.play(
+            resolved["stream_url"], credentials["user_agent"], resolved["track"],
+            output_device=output_device, start_seconds=target,
+        )
+        await _publish_event(request, "playback.state", state)
+        return state
+    except (ValueError, LookupError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PlaybackError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except VkApiException as exc:
+        raise HTTPException(status_code=502, detail=f"VK API error {getattr(exc, 'error_code', 'unknown')}") from exc
+
+
+@router.post("/playback/server/seek")
+async def playback_server_seek(
+    payload: ServerPlaybackSeekRequest, request: Request
+) -> dict[str, object]:
+    current = request.app.state.playback_manager.get_state(payload.output_device)
+    return await _restart_server_zone(
+        request, payload.output_device, payload.position
+    )
+
+
+@router.post("/playback/server/equalizer")
+async def playback_server_equalizer(
+    payload: ServerPlaybackEqualizerRequest, request: Request
+) -> dict[str, object]:
+    manager = request.app.state.playback_manager
+    current = manager.get_state(payload.output_device)
+    bands = {
+        "bass": payload.bass, "low_mid": payload.low_mid, "mid": payload.mid,
+        "high_mid": payload.high_mid, "treble": payload.treble,
+    }
+    if current.get("state") not in ("playing", "paused") or not current.get("track"):
+        state = await manager.set_equalizer(bands, payload.output_device)
+        await _publish_event(request, "playback.state", state)
+        return state
+    return await _restart_server_zone(
+        request, payload.output_device, float(current.get("position") or 0), bands
+    )
+
+
+@router.post("/playback/server/pause")
+async def playback_server_pause(
+    request: Request, output_device: str = Query(default="default", max_length=512)
+) -> dict[str, object]:
+    try:
+        state = await request.app.state.playback_manager.pause(output_device)
         await _publish_event(request, "playback.state", state)
         return state
     except PlaybackError as exc:
@@ -355,9 +445,11 @@ async def playback_server_pause(request: Request) -> dict[str, object]:
 
 
 @router.post("/playback/server/resume")
-async def playback_server_resume(request: Request) -> dict[str, object]:
+async def playback_server_resume(
+    request: Request, output_device: str = Query(default="default", max_length=512)
+) -> dict[str, object]:
     try:
-        state = await request.app.state.playback_manager.resume()
+        state = await request.app.state.playback_manager.resume(output_device)
         await _publish_event(request, "playback.state", state)
         return state
     except PlaybackError as exc:
@@ -365,8 +457,10 @@ async def playback_server_resume(request: Request) -> dict[str, object]:
 
 
 @router.post("/playback/server/stop")
-async def playback_server_stop(request: Request) -> dict[str, object]:
-    state = await request.app.state.playback_manager.stop()
+async def playback_server_stop(
+    request: Request, output_device: str = Query(default="default", max_length=512)
+) -> dict[str, object]:
+    state = await request.app.state.playback_manager.stop(output_device)
     await _publish_event(request, "playback.state", state)
     return state
 
