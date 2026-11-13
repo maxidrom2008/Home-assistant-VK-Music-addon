@@ -389,10 +389,13 @@ async def _restart_server_zone(
         resolved = await resolve_track(make_service(credentials), str(track["id"]))
         duration = max(0.0, float(resolved["track"].get("duration") or 0))
         target = min(max(0.0, float(position)), duration) if duration else max(0.0, float(position))
+        was_paused = current.get("state") == "paused"
         state = await manager.play(
             resolved["stream_url"], credentials["user_agent"], resolved["track"],
             output_device=output_device, start_seconds=target,
         )
+        if was_paused and state.get("state") == "playing":
+            state = await manager.pause(output_device)
         await _publish_event(request, "playback.state", state)
         return state
     except (ValueError, LookupError) as exc:
@@ -407,7 +410,6 @@ async def _restart_server_zone(
 async def playback_server_seek(
     payload: ServerPlaybackSeekRequest, request: Request
 ) -> dict[str, object]:
-    current = request.app.state.playback_manager.get_state(payload.output_device)
     return await _restart_server_zone(
         request, payload.output_device, payload.position
     )
