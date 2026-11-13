@@ -336,7 +336,7 @@ class _PlaybackZone:
                     "state": "error",
                     "mode": "server",
                     "track": None,
-                    "output": "Home Assistant Audio (PulseAudio)",
+                    "output": self._output_label,
                     "error": (
                         "FFmpeg не смог открыть аудиопоток или PulseAudio. "
                         "Подробности смотрите в журнале add-on."
@@ -383,7 +383,7 @@ class _PlaybackZone:
                     "state": "idle",
                     "mode": "server",
                     "track": None,
-                    "output": "Home Assistant Audio (PulseAudio)",
+                    "output": self._output_label,
                     "error": None,
                 }
                 self._position = 0.0
@@ -418,7 +418,7 @@ class _PlaybackZone:
             "state": "idle",
             "mode": "server",
             "track": None,
-            "output": "Home Assistant Audio (PulseAudio)",
+            "output": self._output_label,
             "error": None,
         }
 
