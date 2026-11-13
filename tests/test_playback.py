@@ -264,3 +264,74 @@ def test_set_volume_reports_missing_pactl_as_playback_error(
             await player.set_volume(0.5)
 
     asyncio.run(scenario())
+
+
+def test_haos_outputs_play_independently_and_keep_per_zone_equalizer_and_seek(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    processes: list[FakeProcess] = []
+    commands: list[tuple[object, ...]] = []
+
+    async def no_diagnostics(self) -> str:
+        return ""
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        commands.append(args)
+        process = FakeProcess()
+        processes.append(process)
+        return process
+
+    monkeypatch.setattr(playback._PlaybackZone, "_pulse_diagnostics", no_diagnostics)
+    monkeypatch.setattr(playback.asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+    monkeypatch.setattr(playback, "PLAYBACK_STARTUP_GRACE_SECONDS", 0)
+
+    async def scenario():
+        player = ServerPlaybackManager()
+        track_a = {"id": "1_2", "title": "Zone A", "artist": "Artist A", "duration": 240}
+        track_b = {"id": "3_4", "title": "Zone B", "artist": "Artist B", "duration": 300}
+
+        first = await player.play(
+            "https://cdn.vk.example/a.mp3", "VK UA", track_a,
+            output_device="speaker_a",
+        )
+        second = await player.play(
+            "https://cdn.vk.example/b.mp3", "VK UA", track_b,
+            output_device="speaker_b",
+        )
+
+        assert first["state"] == second["state"] == "playing"
+        assert first["output_device"] == "speaker_a"
+        assert second["output_device"] == "speaker_b"
+        assert len(processes) == 2
+        assert processes[0].returncode is None
+        assert processes[1].returncode is None
+        assert "-device" in commands[0] and commands[0][commands[0].index("-device") + 1] == "speaker_a"
+        assert "-device" in commands[1] and commands[1][commands[1].index("-device") + 1] == "speaker_b"
+        assert player.get_state("speaker_a")["track"]["title"] == "Zone A"
+        assert player.get_state("speaker_b")["track"]["title"] == "Zone B"
+
+        await player.set_equalizer({"bass": 5, "treble": -3}, output_device="speaker_a")
+        resumed = await player.play(
+            "https://cdn.vk.example/a-fresh.mp3", "VK UA", track_a,
+            output_device="speaker_a", start_seconds=42.5,
+        )
+        assert resumed["state"] == "playing"
+        assert resumed["position"] >= 42.5
+        assert processes[0].returncode == -15
+        assert processes[1].returncode is None
+        seek_command = commands[2]
+        assert seek_command.index("-ss") < seek_command.index("-i")
+        assert seek_command[seek_command.index("-ss") + 1] == "42.500"
+        audio_filter = seek_command[seek_command.index("-af") + 1]
+        assert "equalizer=f=60" in audio_filter and "g=5.0" in audio_filter
+        assert "equalizer=f=12000" in audio_filter and "g=-3.0" in audio_filter
+
+        paused = await player.pause("speaker_a")
+        assert paused["state"] == "paused"
+        assert player.get_state("speaker_b")["state"] == "playing"
+        assert processes[1].returncode is None
+        await player.stop_all()
+        assert player.get_state("speaker_a")["state"] == "idle"
+        assert player.get_state("speaker_b")["state"] == "idle"
+
+    asyncio.run(scenario())
