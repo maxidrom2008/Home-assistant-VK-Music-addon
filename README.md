@@ -2,14 +2,14 @@
 
 Standalone VK Music server for Home Assistant OS with a companion Home Assistant `media_player` integration. It runs independently of Music Assistant and does not modify or replace the legacy Music Assistant VK Edition add-on.
 
-**Current release candidate: `1.0.0-rc.17`.** This is a pre-release. CI validates the code, browser bundle and multi-architecture images, but real VK authorization, audible output and hardware-specific playback still require acceptance testing on the target Home Assistant installation.
+**Current release candidate: `1.0.0-rc.18`.** This is a pre-release. CI validates the code, browser bundle and multi-architecture images, but real VK authorization, audible output and hardware-specific playback still require acceptance testing on the target Home Assistant installation.
 
 ## Features
 
 - VK account authorization with VK ID browser CAPTCHA, legacy image CAPTCHA and supported two-factor/device-approval challenges.
 - Persistent VK access-token storage under `/data`; passwords and one-time challenge data are held in memory only.
 - Personal audio library, playlists, playlist tracks, text search and pagination.
-- Browser playback through a server-side stream proxy. Temporary VK CDN URLs and private playlist access keys are not sent to the browser.
+- Browser playback uses a server-side HLS proxy with HLS.js (native HLS where available); signed VK CDN URLs, encryption-key URLs and private playlist access keys remain server-side. FFmpeg transcoding remains available as a compatibility fallback. HLS seeks are handled by the browser media pipeline without restarting FFmpeg.
 - Browser controls: play, pause, resume, stop, previous/next, volume and seek. The server reuses the signed VK stream URL while seeking and asks FFmpeg to seek in the source before transcoding, avoiding a fresh VK API lookup and full decode from the beginning for each seek.
 - Optional server-side playback through FFmpeg and the Home Assistant shared PulseAudio service, with output-device selection and diagnostics.
 - Companion Home Assistant `media_player` integration with library/playlist browsing and native media search.
@@ -90,7 +90,7 @@ All application endpoints are available through Home Assistant Ingress:
 | `GET /api/v1/playlists` | Browse playlists |
 | `GET /api/v1/playlists/{owner_id}_{playlist_id}/tracks` | Browse playlist tracks |
 | `GET /api/v1/search` | Search tracks |
-| `GET /api/v1/tracks/{owner_id}_{track_id}/stream` | Proxied browser audio stream |
+| `GET /api/v1/tracks/{owner_id}_{track_id}/stream` | Legacy FFmpeg-proxied browser audio stream (fallback) |\n| `POST /api/v1/tracks/{owner_id}_{track_id}/hls` | Create an authenticated short-lived HLS playback session |\n| `GET /api/v1/hls/{session_id}/{resource_id}` | Proxy HLS playlists, segments, maps and keys |
 | `GET /api/v1/playback/state` | Current server playback state |
 | `POST /api/v1/playback/server/play` | Start server playback |
 | `POST /api/v1/playback/server/pause` | Pause server playback |
