@@ -479,8 +479,17 @@ class ServerPlaybackManager(_PlaybackZone):
         self._zone_labels: dict[str, str] = {"default": "По умолчанию"}
         self._selected_output = "default"
 
+    def _selected_zone_device(self, output_device: str | None = None) -> str:
+        if output_device:
+            return str(output_device)
+        # Preserve compatibility with callers that set the legacy selected
+        # _output_device attribute directly, while preferring the new selector.
+        if self._output_device != "default":
+            return self._output_device
+        return self._selected_output or "default"
+
     def _zone(self, output_device: str | None = None) -> _PlaybackZone:
-        device = str(output_device or self._selected_output or "default")
+        device = self._selected_zone_device(output_device)
         zone = self._zones.get(device)
         if zone is None:
             zone = _PlaybackZone(
@@ -526,7 +535,7 @@ class ServerPlaybackManager(_PlaybackZone):
         return {"selected": device, "name": choices[device], "active": self.get_states()}
 
     def get_state(self, output_device: str | None = None) -> dict[str, Any]:
-        device = str(output_device or self._selected_output or "default")
+        device = self._selected_zone_device(output_device)
         zone = self._zone(device)
         state = _PlaybackZone.get_state(zone)
         return {**state, "output_device": device}
@@ -545,13 +554,13 @@ class ServerPlaybackManager(_PlaybackZone):
         output_device: str | None = None,
         start_seconds: float = 0.0,
     ) -> dict[str, Any]:
-        device = str(output_device or self._selected_output or "default")
+        device = self._selected_zone_device(output_device)
         zone = self._zone(device)
         state = await _PlaybackZone.play(zone, stream_url, user_agent, track, start_seconds) if device == "default" else await zone.play(stream_url, user_agent, track, start_seconds)
         return {**state, "output_device": device}
 
     async def set_volume(self, volume: float, output_device: str | None = None) -> dict[str, Any]:
-        device = str(output_device or self._selected_output or "default")
+        device = self._selected_zone_device(output_device)
         zone = self._zone(device)
         result = await _PlaybackZone.set_volume(zone, volume) if device == "default" else await zone.set_volume(volume)
         return {**result, "output_device": device}
@@ -559,22 +568,22 @@ class ServerPlaybackManager(_PlaybackZone):
     async def set_equalizer(
         self, bands: dict[str, float], output_device: str | None = None
     ) -> dict[str, Any]:
-        device = str(output_device or self._selected_output or "default")
+        device = self._selected_zone_device(output_device)
         zone = self._zone(device)
         return await _PlaybackZone.set_equalizer(zone, bands) if device == "default" else await zone.set_equalizer(bands)
 
     async def pause(self, output_device: str | None = None) -> dict[str, Any]:
-        device = str(output_device or self._selected_output or "default")
+        device = self._selected_zone_device(output_device)
         zone = self._zone(device)
         return await _PlaybackZone.pause(zone) if device == "default" else await zone.pause()
 
     async def resume(self, output_device: str | None = None) -> dict[str, Any]:
-        device = str(output_device or self._selected_output or "default")
+        device = self._selected_zone_device(output_device)
         zone = self._zone(device)
         return await _PlaybackZone.resume(zone) if device == "default" else await zone.resume()
 
     async def stop(self, output_device: str | None = None) -> dict[str, Any]:
-        device = str(output_device or self._selected_output or "default")
+        device = self._selected_zone_device(output_device)
         zone = self._zone(device)
         return await _PlaybackZone.stop(zone) if device == "default" else await zone.stop()
 
