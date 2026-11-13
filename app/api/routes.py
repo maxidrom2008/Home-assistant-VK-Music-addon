@@ -205,7 +205,7 @@ async def auth_challenge_cancel(challenge_id: str, request: Request) -> dict[str
 @router.delete("/auth/token")
 async def auth_delete(request: Request) -> dict[str, object]:
     request.app.state.auth_manager.cancel_all()
-    await request.app.state.playback_manager.stop()
+    await request.app.state.playback_manager.stop_all()
     credentials = get_credentials(request.app.state.database_path)
     if credentials:
         token = str(credentials.get("access_token") or "")
@@ -214,7 +214,8 @@ async def auth_delete(request: Request) -> dict[str, object]:
     deleted = delete_credentials(request.app.state.database_path)
     result = {"deleted": deleted, "authenticated": False, "state": "not_configured"}
     await _publish_event(request, "auth.state", result)
-    await _publish_event(request, "playback.state", {"state": "idle", "track": None})
+    for state in request.app.state.playback_manager.get_states():
+        await _publish_event(request, "playback.state", state)
     return result
 
 
