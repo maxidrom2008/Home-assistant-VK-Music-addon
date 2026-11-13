@@ -145,7 +145,7 @@ class VKMusicServerMediaPlayer(MediaPlayerEntity):
         self._position_updated_at = datetime.now(timezone.utc)
         self._output = str(data.get("output") or "Home Assistant Audio (PulseAudio)")
         self._output_device = str(data.get("output_device") or "default")
-        self._volume = float(data.get("volume") or 0.8)
+        self._volume = float(data.get("volume", 0.8))
         self._error = data.get("error")
 
     async def async_media_play(self) -> None:
@@ -187,6 +187,9 @@ class VKMusicServerMediaPlayer(MediaPlayerEntity):
         track_id = media_id.removeprefix("track:")
         if not re.fullmatch(r"-?\d+_-?\d+", track_id):
             raise ValueError("Unsupported VK track id")
+        requested_output = kwargs.get("output_device")
+        if isinstance(requested_output, str) and requested_output:
+            self._output_device = requested_output
         await self.api.post("playback/server/play", {
             "track_id": track_id, "output_device": self._output_device,
         })
