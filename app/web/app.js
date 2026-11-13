@@ -793,8 +793,21 @@ $("audio").addEventListener("ended", () => {
 });
 $("audio").addEventListener("error", () => {
   stopBrowserTimeline();
-  if ($("audio").src && browserPlaybackMode === "hls") { $("libraryMessage").textContent = "HLS-поток прерван. Попробуйте повторить воспроизведение."; }
-  else if ($("audio").src) $("libraryMessage").textContent = "VK не смог предоставить поток этого трека. Попробуйте другой трек или повторите позже.";
+  if ($("audio").src && browserPlaybackMode === "hls") {
+    const track = currentItems[currentTrackIndex];
+    const position = $("audio").currentTime || 0;
+    if (track) {
+      startLegacyBrowserStream(track, position).then(() => {
+        $("outputStatus").textContent = "HLS прерван — включён резервный FFmpeg-поток";
+      }).catch(err => {
+        $("libraryMessage").textContent = "HLS и резервный поток недоступны: " + err.message;
+      });
+    } else {
+      $("libraryMessage").textContent = "HLS-поток прерван. Попробуйте повторить воспроизведение.";
+    }
+  } else if ($("audio").src) {
+    $("libraryMessage").textContent = "VK не смог предоставить поток этого трека. Попробуйте другой трек или повторите позже.";
+  }
 });
 $("copyInternalUrl").addEventListener("click", async () => {
   try {
