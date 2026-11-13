@@ -219,12 +219,12 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
     assert.equal(spectrum.dataset.maxFrequency, "20000");
     assert.equal(spectrum.dataset.fftSize, "8192");
     assert.equal(spectrum.dataset.sensitivityDb, "10");
-    assert.match(html, /#player\\{position:sticky;top:0/);
-    assert.match(html, /#player \.playerButtons\\{[^}]*flex-wrap:nowrap/);
+    assert.ok(html.includes("#player{position:sticky;top:0"));
+    assert.ok(html.includes("#player .playerButtons{margin-top:10px;flex-wrap:nowrap"));
     assert.equal(window.document.querySelectorAll("#player .playerButtons").length, 1);
-    assert.match(appJs, /spectrumAnalyser\\.fftSize = 8192/);
-    assert.match(appJs, /SPECTRUM_HIGH_SHELF_DB = 4/);
-    assert.match(appJs, /SPECTRUM_GAIN_DB = 10/);
+    assert.ok(appJs.includes("spectrumAnalyser.fftSize = 8192"));
+    assert.ok(appJs.includes("SPECTRUM_HIGH_SHELF_DB = 4"));
+    assert.ok(appJs.includes("SPECTRUM_GAIN_DB = 10"));
     assert.equal(window.document.getElementById("outputStatus").textContent.includes("HLS"), false);
     assert.equal(window.document.getElementById("timelineSeek").disabled, false);
 
