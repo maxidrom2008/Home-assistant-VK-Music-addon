@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0-rc.21
+- Reduce spectrum analyzer gain and soften its response to prevent loud peaks from pinning most frequency bars at maximum.
+- Increase visualizer height by 50% and render 14 stacked green-to-red color segments per frequency band.
+
 ## 1.0.0-rc.20
 - Increase spectrum sensitivity using RMS power aggregation, a larger FFT, a wider dynamic range and a gentle high-frequency lift; calculate band edges from actual FFT-bin frequencies through 20 kHz.
 - Keep the player sticky at the top while browsing the library and combine playback/navigation controls into one compact horizontal row.

@@ -38,11 +38,11 @@ let spectrumCanvasSize = "";
 const SPECTRUM_BANDS = 12;
 const SPECTRUM_MIN_HZ = 50;
 const SPECTRUM_MAX_HZ = 20000;
-const SPECTRUM_GAIN_DB = 10;
-const SPECTRUM_HIGH_SHELF_DB = 4;
+const SPECTRUM_GAIN_DB = 0;
+const SPECTRUM_HIGH_SHELF_DB = 2;
 const SPECTRUM_FLOOR_DB = -96;
-const SPECTRUM_CEILING_DB = -38;
-const SPECTRUM_CURVE = 0.72;
+const SPECTRUM_CEILING_DB = -24;
+const SPECTRUM_CURVE = 1.08;
 
 function stopSpectrumAnimation() {
   if (spectrumFrame) cancelAnimationFrame(spectrumFrame);
@@ -69,6 +69,11 @@ function drawSpectrum() {
   ctx.clearRect(0, 0, width, height);
   const gap = 5;
   const barWidth = Math.max(2, (width - gap * (SPECTRUM_BANDS - 1)) / SPECTRUM_BANDS);
+  const segmentHeight = 4;
+  const segmentGap = 2;
+  const segmentCount = 14;
+  const segmentStep = segmentHeight + segmentGap;
+  const segmentColors = ["#22c55e", "#4ade80", "#84cc16", "#a3e635", "#c7e21b", "#eab308", "#facc15", "#f59e0b", "#fb923c", "#f97316", "#ef4444", "#dc2626", "#b91c1c", "#991b1b"];
   const nyquist = spectrumContext.sampleRate / 2;
   for (let band = 0; band < SPECTRUM_BANDS; band += 1) {
     const lowHz = SPECTRUM_MIN_HZ * Math.pow(SPECTRUM_MAX_HZ / SPECTRUM_MIN_HZ, band / SPECTRUM_BANDS);
@@ -93,14 +98,14 @@ function drawSpectrum() {
     const normalized = Math.max(0, Math.min(1,
       (adjustedDb - SPECTRUM_FLOOR_DB) / (SPECTRUM_CEILING_DB - SPECTRUM_FLOOR_DB)));
     const level = Math.pow(normalized, SPECTRUM_CURVE);
-    const barHeight = Math.max(3, level * (height - 5));
+    const activeSegments = Math.min(segmentCount, Math.round(level * segmentCount));
     const x = band * (barWidth + gap);
-    const y = height - barHeight;
-    const gradient = ctx.createLinearGradient(0, y, 0, height);
-    gradient.addColorStop(0, "#a5b4fc");
-    gradient.addColorStop(1, "#5368e8");
-    ctx.fillStyle = gradient;
-    ctx.fillRect(x, y, barWidth, barHeight);
+    for (let segment = 0; segment < activeSegments; segment += 1) {
+      const y = height - segmentHeight - segment * segmentStep;
+      ctx.fillStyle = segmentColors[Math.min(segmentColors.length - 1,
+        Math.floor(segment / (segmentCount - 1) * (segmentColors.length - 1)))];
+      ctx.fillRect(x, y, barWidth, segmentHeight);
+    }
   }
   spectrumFrame = requestAnimationFrame(drawSpectrum);
 }
