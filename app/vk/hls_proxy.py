@@ -25,6 +25,7 @@ class HlsResource:
 @dataclass
 class _Session:
     origin_host: str
+    origin_port: int | None
     user_agent: str
     token_fingerprint: str
     resources: dict[str, str]
@@ -56,6 +57,7 @@ class HlsProxy:
         resource_id = uuid.uuid4().hex
         self._sessions[session_id] = _Session(
             origin_host=parsed.hostname.lower(),
+            origin_port=parsed.port,
             user_agent=user_agent,
             token_fingerprint=token_fingerprint,
             resources={resource_id: url},
@@ -96,13 +98,14 @@ class HlsProxy:
             parsed.scheme != "https"
             or not parsed.hostname
             or parsed.hostname.lower() != session.origin_host
+            or parsed.port != session.origin_port
             or parsed.username
             or parsed.password
         ):
             raise HlsProxyError("HLS playlist содержит внешний или небезопасный URL")
         resource_id = uuid.uuid4().hex
         session.resources[resource_id] = target
-        return f"/api/v1/hls/{session_id}/{resource_id}"
+        return resource_id
 
     def rewrite_playlist(self, session_id: str, token_fingerprint: str, base_url: str, text: str) -> str:
         session = self._session(session_id, token_fingerprint)
