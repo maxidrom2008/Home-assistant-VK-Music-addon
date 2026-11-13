@@ -1,4 +1,5 @@
 """Versioned REST API."""
+import hashlib
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from vkpymusic import Service, VkMobileClient
@@ -10,6 +11,7 @@ from app.storage.database import delete_credentials, get_credentials
 from app.vk.auth import VKAuthError
 from app.version import VERSION
 from app.vk.stream_cache import StreamUrlCache
+from app.vk.hls_proxy import HlsProxy, HlsProxyError
 from app.vk.client import (
     list_my_tracks,
     list_playlists,
@@ -22,6 +24,7 @@ from app.vk.client import (
 
 router = APIRouter(prefix="/api/v1")
 _STREAM_URL_CACHE = StreamUrlCache()
+_HLS_PROXY = HlsProxy()
 
 
 async def _publish_event(request: Request, event: str, data: dict[str, object]) -> None:
@@ -189,7 +192,9 @@ async def auth_delete(request: Request) -> dict[str, object]:
     await request.app.state.playback_manager.stop()
     credentials = get_credentials(request.app.state.database_path)
     if credentials:
-        _STREAM_URL_CACHE.clear_for_token(str(credentials.get("access_token") or ""))
+        token = str(credentials.get("access_token") or "")
+        _STREAM_URL_CACHE.clear_for_token(token)
+        _HLS_PROXY.clear_for_token(hashlib.sha256(token.encode()).hexdigest())
     deleted = delete_credentials(request.app.state.database_path)
     result = {"deleted": deleted, "authenticated": False, "state": "not_configured"}
     await _publish_event(request, "auth.state", result)
@@ -394,3 +399,64 @@ async def track_stream(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except VkApiException as exc:
         raise HTTPException(status_code=502, detail=f"VK API error {getattr(exc, 'error_code', 'unknown')}") from exc
+
+
+@router.post("/tracks/{track_id}/hls")
+async def create_track_hls_session(track_id: str, request: Request) -> dict[str, str]:
+    """Create a short-lived browser HLS session; signed VK URLs remain server-side."""
+    credentials = get_credentials(request.app.state.database_path)
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Сначала подключите VK")
+    try:
+        service = make_service(credentials)
+        url = await _STREAM_URL_CACHE.get_or_resolve(
+            str(credentials["access_token"]),
+            track_id,
+            lambda: resolve_stream(service, track_id),
+            force_refresh=True,
+        )
+        fingerprint = hashlib.sha256(str(credentials["access_token"]).encode()).hexdigest()
+        session_id, resource_id = _HLS_PROXY.create_session(
+            url, str(credentials["user_agent"]), fingerprint
+        )
+        return {
+            "manifest_url": f"api/v1/hls/{session_id}/{resource_id}",
+            "session_id": session_id,
+        }
+    except (ValueError, HlsProxyError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except VkApiException as exc:
+        raise HTTPException(status_code=502, detail=f"VK API error {getattr(exc, 'error_code', 'unknown')}") from exc
+
+
+@router.get("/hls/{session_id}/{resource_id}")
+async def proxy_hls_resource(
+    session_id: str,
+    resource_id: str,
+    request: Request,
+):
+    """Proxy a playlist, media segment, initialization map or AES key."""
+    from fastapi.responses import Response
+
+    credentials = get_credentials(request.app.state.database_path)
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Сначала подключите VK")
+    fingerprint = hashlib.sha256(str(credentials["access_token"]).encode()).hexdigest()
+    try:
+        resource = await _HLS_PROXY.fetch(
+            session_id, resource_id, fingerprint, request.headers.get("range")
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="HLS-сессия истекла или недоступна") from exc
+    except HlsProxyError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    headers = {"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"}
+    headers.update(resource.headers)
+    return Response(
+        content=resource.body,
+        status_code=resource.status_code,
+        media_type=resource.content_type,
+        headers=headers,
+    )

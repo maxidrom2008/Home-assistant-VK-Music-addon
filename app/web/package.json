@@ -1,13 +1,14 @@
 {
   "name": "vk-music-server-web",
-  "version": "1.0.0-rc.17",
+  "version": "1.0.0-rc.18",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "esbuild app.js --bundle --format=esm --platform=browser --target=es2022 --outfile=app.bundle.js"
   },
   "dependencies": {
-    "@vkid/captcha": "2.0.0"
+    "@vkid/captcha": "2.0.0",
+    "hls.js": "1.6.13"
   },
   "devDependencies": {
     "esbuild": "0.25.12",

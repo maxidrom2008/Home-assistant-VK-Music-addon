@@ -1,4 +1,5 @@
 import { CaptchaWidget } from "@vkid/captcha";
+import Hls from "hls.js";
 
 const api = p => new URL("api/v1/" + p, document.baseURI).toString();
 const $ = id => document.getElementById(id);
@@ -25,6 +26,8 @@ let timelineSeeking = false;
 let seekRequestId = 0;
 let playbackVolume = 0.8;
 let currentBrowserTrackId = null;
+let browserHls = null;
+let browserPlaybackMode = "legacy";
 
 function applyServerPlaybackState(state) {
   if (!state || outputMode !== "server") return;
@@ -206,13 +209,24 @@ function updateBrowserTimeline() {
 async function seekBrowserStream(seconds) {
   const audio = $("audio");
   const requestId = ++seekRequestId;
-  const wasPlaying = !audio.paused && !audio.ended;
   const target = Math.max(0, Math.min(browserTrackDuration, Number(seconds) || 0));
+  if (browserPlaybackMode === "hls") {
+    try {
+      // HLS.js/native HLS performs an in-stream seek; no FFmpeg process restart.
+      audio.currentTime = target;
+      browserStreamOffset = 0;
+      $("libraryMessage").textContent = "";
+    } catch (err) {
+      $("libraryMessage").textContent = "Не удалось перемотать HLS-поток: " + err.message;
+    } finally {
+      timelineSeeking = false;
+      renderBrowserTimeline();
+    }
+    return;
+  }
+  const wasPlaying = !audio.paused && !audio.ended;
   const source = api("tracks/" + encodeURIComponent(currentBrowserTrackId) + "/stream?start=" + target.toFixed(3));
-
   audio.pause();
-  // Seeking replaces the stream; audio.currentTime restarts at zero for the
-  // sliced stream. Keep its absolute offset for the visible track timeline.
   browserStreamOffset = target;
   audio.src = source;
   const ready = new Promise((resolve, reject) => {
@@ -233,7 +247,6 @@ async function seekBrowserStream(seconds) {
       resolve();
     }
   });
-
   try {
     await ready;
     if (requestId !== seekRequestId) return;
@@ -241,15 +254,72 @@ async function seekBrowserStream(seconds) {
     if (wasPlaying) await audio.play();
     $("libraryMessage").textContent = "";
   } catch (err) {
-    if (requestId === seekRequestId) {
-      $("libraryMessage").textContent = "Не удалось перемотать трек: " + err.message;
-    }
+    if (requestId === seekRequestId) $("libraryMessage").textContent = "Не удалось перемотать трек: " + err.message;
   } finally {
     if (requestId === seekRequestId) {
       timelineSeeking = false;
       renderBrowserTimeline();
     }
   }
+}
+function destroyBrowserHls() {
+  if (browserHls) {
+    browserHls.destroy();
+    browserHls = null;
+  }
+}
+async function startLegacyBrowserStream(track, start = 0) {
+  destroyBrowserHls();
+  browserPlaybackMode = "legacy";
+  browserStreamOffset = Math.max(0, Number(start) || 0);
+  const audio = $("audio");
+  audio.volume = playbackVolume;
+  const suffix = browserStreamOffset > 0 ? "?start=" + browserStreamOffset.toFixed(3) : "";
+  audio.src = api("tracks/" + encodeURIComponent(track.id) + "/stream" + suffix);
+  await audio.play();
+}
+async function startHlsBrowserStream(track) {
+  const audio = $("audio");
+  const nativeHls = audio.canPlayType("application/vnd.apple.mpegurl");
+  if (!Hls.isSupported() && !nativeHls) return false;
+  const session = await call("tracks/" + encodeURIComponent(track.id) + "/hls", { method: "POST" });
+  const manifestUrl = new URL(session.manifest_url, document.baseURI).toString();
+  browserStreamOffset = 0;
+  browserPlaybackMode = "hls";
+  if (!Hls.isSupported()) {
+    audio.src = manifestUrl;
+    audio.volume = playbackVolume;
+    await audio.play();
+    return true;
+  }
+  destroyBrowserHls();
+  const instance = new Hls({ enableWorker: true, lowLatencyMode: false });
+  browserHls = instance;
+  await new Promise((resolve, reject) => {
+    let settled = false;
+    instance.on(Hls.Events.MEDIA_ATTACHED, () => instance.loadSource(manifestUrl));
+    instance.on(Hls.Events.MANIFEST_PARSED, () => {
+      settled = true;
+      resolve();
+    });
+    instance.on(Hls.Events.ERROR, (_event, data) => {
+      if (!data.fatal) return;
+      if (!settled) {
+        settled = true;
+        reject(new Error(data.details || "HLS playback failed"));
+        return;
+      }
+      const position = audio.currentTime || 0;
+      destroyBrowserHls();
+      startLegacyBrowserStream(track, position).catch(err => {
+        $("libraryMessage").textContent = "HLS и резервный поток недоступны: " + err.message;
+      });
+    });
+    instance.attachMedia(audio);
+  });
+  audio.volume = playbackVolume;
+  await audio.play();
+  return true;
 }
 function renderPlaylists(items) {
   const list = $("trackList");
@@ -379,6 +449,7 @@ async function playTrack(index) {
     stopBrowserTimeline();
     $("browserTimeline").hidden = true;
     $("audio").pause();
+    destroyBrowserHls();
     $("audio").removeAttribute("src");
     try {
       const state = await call("playback/server/play", {
@@ -399,13 +470,21 @@ async function playTrack(index) {
     return;
   }
   const audio = $("audio");
-  audio.volume = playbackVolume;
-  audio.src = api("tracks/" + encodeURIComponent(track.id) + "/stream");
+  destroyBrowserHls();
   try {
-    await audio.play();
-    $("outputStatus").textContent = "Воспроизведение в этом браузере";
+    const usedHls = await startHlsBrowserStream(track);
+    if (!usedHls) await startLegacyBrowserStream(track);
+    $("outputStatus").textContent = browserPlaybackMode === "hls"
+      ? "Воспроизведение через HLS · перемотка без перезапуска FFmpeg"
+      : "Воспроизведение в браузере (резервный FFmpeg-поток)";
   } catch (err) {
-    $("libraryMessage").textContent = "Не удалось начать воспроизведение: " + (err.message || String(err));
+    destroyBrowserHls();
+    try {
+      await startLegacyBrowserStream(track);
+      $("outputStatus").textContent = "HLS недоступен — включён резервный FFmpeg-поток";
+    } catch (fallbackError) {
+      $("libraryMessage").textContent = "Не удалось начать воспроизведение: " + (fallbackError.message || err.message || String(err));
+    }
   }
 }
 async function refreshAudioOutputs() {
@@ -459,6 +538,8 @@ async function setOutputMode(mode) {
   $("serverPause").hidden = true; $("serverResume").hidden = true; $("serverStop").hidden = true;
   if (mode === "server") {
     $("audio").pause();
+    destroyBrowserHls();
+    browserPlaybackMode = "legacy";
     await refreshAudioOutputs();
     $("outputStatus").textContent = "Следующий выбранный трек будет играть через аудиовыход HAOS.";
     try {
@@ -677,7 +758,7 @@ $("serverResume").addEventListener("click", () => serverPlaybackAction("resume")
 $("serverStop").addEventListener("click", () => serverPlaybackAction("stop"));
 $("browserPause").addEventListener("click", () => $("audio").pause());
 $("browserResume").addEventListener("click", async () => { try { await $("audio").play(); } catch(e) { $("libraryMessage").textContent=e.message; } });
-$("browserStop").addEventListener("click", () => { const a=$("audio"); a.pause(); a.currentTime=0; a.removeAttribute("src"); a.load(); $("browserPause").hidden=true; $("browserResume").hidden=true; $("browserStop").hidden=true; renderBrowserTimeline(); });
+$("browserStop").addEventListener("click", () => { const a=$("audio"); a.pause(); destroyBrowserHls(); browserPlaybackMode="legacy"; a.currentTime=0; a.removeAttribute("src"); a.load(); $("browserPause").hidden=true; $("browserResume").hidden=true; $("browserStop").hidden=true; renderBrowserTimeline(); });
 $("timelineSeek").addEventListener("pointerdown", () => { timelineSeeking = true; });
 $("timelineSeek").addEventListener("input", event => {
   timelineSeeking = true;
@@ -712,7 +793,21 @@ $("audio").addEventListener("ended", () => {
 });
 $("audio").addEventListener("error", () => {
   stopBrowserTimeline();
-  if ($("audio").src) $("libraryMessage").textContent = "VK не смог предоставить поток этого трека. Попробуйте другой трек или повторите позже.";
+  if ($("audio").src && browserPlaybackMode === "hls") {
+    const track = currentItems[currentTrackIndex];
+    const position = $("audio").currentTime || 0;
+    if (track) {
+      startLegacyBrowserStream(track, position).then(() => {
+        $("outputStatus").textContent = "HLS прерван — включён резервный FFmpeg-поток";
+      }).catch(err => {
+        $("libraryMessage").textContent = "HLS и резервный поток недоступны: " + err.message;
+      });
+    } else {
+      $("libraryMessage").textContent = "HLS-поток прерван. Попробуйте повторить воспроизведение.";
+    }
+  } else if ($("audio").src) {
+    $("libraryMessage").textContent = "VK не смог предоставить поток этого трека. Попробуйте другой трек или повторите позже.";
+  }
 });
 $("copyInternalUrl").addEventListener("click", async () => {
   try {
