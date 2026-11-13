@@ -397,7 +397,7 @@ class _PlaybackZone:
                 }
         if self._on_state_change is not None:
             try:
-                await self._on_state_change(self.get_state())
+                await self._on_state_change(_PlaybackZone.get_state(self))
             except Exception:
                 # Event delivery must never break playback process monitoring.
                 pass
