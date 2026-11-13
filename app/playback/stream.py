@@ -40,8 +40,9 @@ async def proxy_audio(url: str, user_agent: str, range_header: str | None = None
     except OSError as exc:
         raise HTTPException(status_code=502, detail="Не удалось запустить обработчик аудиопотока") from exc
 
-    # Catch immediate failures before committing a successful HTTP response.
-    await asyncio.sleep(0.2)
+    # Give the child process one event-loop turn to report an immediate failure.
+    # Avoid a fixed 200 ms delay on every initial play and seek request.
+    await asyncio.sleep(0)
     if process.returncode is not None:
         error = (await process.stderr.read()).decode("utf-8", "replace")[-1200:]
         _LOGGER.warning("VK browser stream FFmpeg exited (%s): %s", process.returncode, error.strip())

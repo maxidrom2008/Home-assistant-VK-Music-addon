@@ -2,6 +2,10 @@
 
 All notable project changes are recorded here. Versions are Home Assistant add-on release candidates unless otherwise noted.
 
+## 1.0.0-rc.17
+- Remove the fixed 200 ms preflight delay before returning browser audio streams; retain an event-loop-turn check for immediately failed FFmpeg processes.
+- Avoid adding a constant wait to every initial play and seek request.
+
 ## 1.0.0-rc.16
 - Reuse the signed VK stream URL during browser seeks so the server does not repeat `get_songs_by_id_async` for every offset request.
 - Move FFmpeg `-ss` before `-i` to use input-side seeking and avoid decoding the track from the beginning for each seek.
