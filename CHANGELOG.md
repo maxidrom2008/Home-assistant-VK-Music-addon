@@ -1,6 +1,10 @@
-## 1.0.0-rc.18\n- Add a server-side HLS proxy that keeps signed VK CDN URLs and AES key URLs out of the browser.\n- Use HLS.js for browser playback and in-stream seeking; retain the existing FFmpeg endpoint as a compatibility fallback.\n- Rewrite playlist, variant, segment, initialization-map and key references to opaque, account-scoped local URLs; preserve byte-range requests and expire sessions.\n- Add HLS proxy tests for URI rewriting, external-host rejection, session isolation/expiry and byte-range forwarding.\n\n# Changelog
+# Changelog
 
-## 1.0.0-rc.19
+## 1.0.0-rc.20
+- Increase spectrum sensitivity using RMS power aggregation, a larger FFT, a wider dynamic range and a gentle high-frequency lift; calculate band edges from actual FFT-bin frequencies through 20 kHz.
+- Keep the player sticky at the top while browsing the library and combine playback/navigation controls into one compact horizontal row.
+
+## 1.0.0-rc.18\n- Add a server-side HLS proxy that keeps signed VK CDN URLs and AES key URLs out of the browser.\n- Use HLS.js for browser playback and in-stream seeking; retain the existing FFmpeg endpoint as a compatibility fallback.\n- Rewrite playlist, variant, segment, initialization-map and key references to opaque, account-scoped local URLs; preserve byte-range requests and expire sessions.\n- Add HLS proxy tests for URI rewriting, external-host rejection, session isolation/expiry and byte-range forwarding.\n\n## 1.0.0-rc.19
 - Replace the browser player's HLS/FFmpeg technical status text with a lightweight 12-band Web Audio spectrum visualizer.
 - Analyze logarithmically spaced frequencies from 50 Hz to 20 kHz; pause animation when playback pauses and hide it for HAOS server output.
 - Keep audio playback functional on browsers without Web Audio support and remove protocol-specific status wording.

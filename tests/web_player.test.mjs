@@ -27,6 +27,7 @@ async function waitFor(predicate, description, timeoutMs = 2000) {
 
 test("browser player loads, plays, seeks and switches to HAOS playback", async () => {
   const html = await readFile(new URL("../app/web/index.html", import.meta.url), "utf8");
+  const appJs = await readFile(new URL("../app/web/app.js", import.meta.url), "utf8");
   const dom = new JSDOM(html, {
     url: "http://homeassistant.local/ingress/vk_music_server/",
     pretendToBeVisual: true,
@@ -216,6 +217,14 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
     assert.equal(spectrum.dataset.bands, "12");
     assert.equal(spectrum.dataset.minFrequency, "50");
     assert.equal(spectrum.dataset.maxFrequency, "20000");
+    assert.equal(spectrum.dataset.fftSize, "8192");
+    assert.equal(spectrum.dataset.sensitivityDb, "10");
+    assert.ok(html.includes("#player{position:sticky;top:0"));
+    assert.ok(html.includes("#player .playerButtons{margin-top:10px;flex-wrap:nowrap"));
+    assert.equal(window.document.querySelectorAll("#player .playerButtons").length, 1);
+    assert.ok(appJs.includes("spectrumAnalyser.fftSize = 8192"));
+    assert.ok(appJs.includes("SPECTRUM_HIGH_SHELF_DB = 4"));
+    assert.ok(appJs.includes("SPECTRUM_GAIN_DB = 10"));
     assert.equal(window.document.getElementById("outputStatus").textContent.includes("HLS"), false);
     assert.equal(window.document.getElementById("timelineSeek").disabled, false);
 
