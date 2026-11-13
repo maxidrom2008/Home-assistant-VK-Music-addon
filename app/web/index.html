@@ -65,7 +65,8 @@ small{display:block;color:var(--muted);margin-top:10px}
 .eqBand input{width:100%;padding:0;accent-color:var(--accent)}
 .eqBand output{font-size:11px;font-variant-numeric:tabular-nums;color:#cbd5e1}
 #activeZones{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
-.zoneStatus{display:flex;flex-direction:column;gap:3px;min-width:180px;max-width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:#0d1628;font-size:12px}
+.zoneStatus{display:flex;flex-direction:column;gap:3px;min-width:180px;max-width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:#0d1628;color:inherit;font:inherit;font-size:12px;text-align:left;cursor:pointer}
+.zoneStatus[aria-pressed="true"]{border-color:var(--accent);background:#16233b}
 .zoneStatus span{color:var(--muted);overflow-wrap:anywhere}
 @media(max-width:560px){.eqGrid{grid-template-columns:repeat(5,minmax(0,1fr));gap:7px}.eqBand label{font-size:10px}.zoneStatus{min-width:100%}}
 </style>
