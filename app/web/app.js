@@ -38,6 +38,11 @@ let spectrumCanvasSize = "";
 const SPECTRUM_BANDS = 12;
 const SPECTRUM_MIN_HZ = 50;
 const SPECTRUM_MAX_HZ = 20000;
+const SPECTRUM_GAIN_DB = 10;
+const SPECTRUM_HIGH_SHELF_DB = 4;
+const SPECTRUM_FLOOR_DB = -96;
+const SPECTRUM_CEILING_DB = -38;
+const SPECTRUM_CURVE = 0.72;
 
 function stopSpectrumAnimation() {
   if (spectrumFrame) cancelAnimationFrame(spectrumFrame);
@@ -68,16 +73,27 @@ function drawSpectrum() {
   for (let band = 0; band < SPECTRUM_BANDS; band += 1) {
     const lowHz = SPECTRUM_MIN_HZ * Math.pow(SPECTRUM_MAX_HZ / SPECTRUM_MIN_HZ, band / SPECTRUM_BANDS);
     const highHz = SPECTRUM_MIN_HZ * Math.pow(SPECTRUM_MAX_HZ / SPECTRUM_MIN_HZ, (band + 1) / SPECTRUM_BANDS);
-    const first = Math.max(0, Math.floor(lowHz / nyquist * spectrumData.length));
-    const last = Math.min(spectrumData.length - 1, Math.max(first, Math.ceil(Math.min(highHz, nyquist) / nyquist * spectrumData.length)));
-    let sum = 0;
+    const binWidth = spectrumContext.sampleRate / spectrumAnalyser.fftSize;
+    // Use bin-centre frequencies to keep the upper bands aligned through 20 kHz.
+    const first = Math.max(0, Math.ceil(lowHz / binWidth));
+    const last = Math.min(spectrumData.length - 1, Math.floor(Math.min(highHz, nyquist) / binWidth));
+    let powerSum = 0;
     let count = 0;
     for (let bin = first; bin <= last; bin += 1) {
       const db = spectrumData[bin];
-      if (Number.isFinite(db)) { sum += Math.max(0, Math.min(1, (db + 88) / 62)); count += 1; }
+      if (Number.isFinite(db)) {
+        const amplitude = Math.pow(10, db / 20);
+        powerSum += amplitude * amplitude;
+        count += 1;
+      }
     }
-    const level = count ? sum / count : 0;
-    const barHeight = Math.max(2, level * (height - 5));
+    const bandDb = count ? 10 * Math.log10(powerSum / count) : SPECTRUM_FLOOR_DB;
+    const highFrequencyLift = SPECTRUM_HIGH_SHELF_DB * (band / (SPECTRUM_BANDS - 1));
+    const adjustedDb = bandDb + SPECTRUM_GAIN_DB + highFrequencyLift;
+    const normalized = Math.max(0, Math.min(1,
+      (adjustedDb - SPECTRUM_FLOOR_DB) / (SPECTRUM_CEILING_DB - SPECTRUM_FLOOR_DB)));
+    const level = Math.pow(normalized, SPECTRUM_CURVE);
+    const barHeight = Math.max(3, level * (height - 5));
     const x = band * (barWidth + gap);
     const y = height - barHeight;
     const gradient = ctx.createLinearGradient(0, y, 0, height);
@@ -97,8 +113,10 @@ function startSpectrum() {
     if (!spectrumContext) {
       spectrumContext = new AudioContextClass();
       spectrumAnalyser = spectrumContext.createAnalyser();
-      spectrumAnalyser.fftSize = 4096;
-      spectrumAnalyser.smoothingTimeConstant = 0.78;
+      spectrumAnalyser.fftSize = 8192;
+      spectrumAnalyser.minDecibels = -100;
+      spectrumAnalyser.maxDecibels = -20;
+      spectrumAnalyser.smoothingTimeConstant = 0.68;
       spectrumData = new Float32Array(spectrumAnalyser.frequencyBinCount);
       spectrumSource = spectrumContext.createMediaElementSource($("audio"));
       spectrumSource.connect(spectrumAnalyser);
