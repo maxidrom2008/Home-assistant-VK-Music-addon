@@ -449,7 +449,7 @@ async def playback_server_pause(
 
 @router.post("/playback/server/resume")
 async def playback_server_resume(
-    request: Request, output_device: str = Query(default="default", max_length=512)
+    request: Request, output_device: str | None = Query(default=None, max_length=512)
 ) -> dict[str, object]:
     try:
         state = await request.app.state.playback_manager.resume(output_device) if output_device else await request.app.state.playback_manager.resume()
@@ -461,7 +461,7 @@ async def playback_server_resume(
 
 @router.post("/playback/server/stop")
 async def playback_server_stop(
-    request: Request, output_device: str = Query(default="default", max_length=512)
+    request: Request, output_device: str | None = Query(default=None, max_length=512)
 ) -> dict[str, object]:
     state = await request.app.state.playback_manager.stop(output_device) if output_device else await request.app.state.playback_manager.stop()
     await _publish_event(request, "playback.state", state)
