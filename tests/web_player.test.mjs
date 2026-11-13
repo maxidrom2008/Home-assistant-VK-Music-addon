@@ -338,16 +338,26 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
     assert.equal(JSON.parse(calls.findLast((call) => call.path === "playback/server/equalizer").body).bass, 5);
 
     const output = window.document.getElementById("audioOutput");
+    const zoneRefreshesBeforeSelect = calls.filter((call) => call.path === "playback/states").length;
     output.value = "selected_sink";
     output.dispatchEvent(new window.Event("change", { bubbles: true }));
     await waitFor(
       () => calls.some((call) => call.path === "playback/state" && call.outputDevice === "selected_sink"),
       "selected HAOS zone state",
     );
+    await waitFor(
+      () => calls.filter((call) => call.path === "playback/states").length > zoneRefreshesBeforeSelect,
+      "selected zone panel refresh",
+    );
+    const zoneRefreshesBeforeSecondPlay = calls.filter((call) => call.path === "playback/states").length;
     window.document.querySelector("#trackList button").click();
     await waitFor(
       () => serverZones.has("selected_sink"),
       "second HAOS playback zone",
+    );
+    await waitFor(
+      () => calls.filter((call) => call.path === "playback/states").length > zoneRefreshesBeforeSecondPlay,
+      "second zone panel refresh",
     );
     assert.equal(serverZones.has("default"), true, "first HAOS zone remains active");
     assert.equal(serverZones.get("default").state, "playing");
