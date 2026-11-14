@@ -216,6 +216,10 @@ async function refreshPlaybackZones() {
     const host = $("activeZones");
     if (!host) return;
     const active = (data.zones || []).filter(zone => ["playing", "paused", "error"].includes(zone.state));
+    const summary = $("zoneSummaryStatus");
+    if (summary) summary.textContent = active.length
+      ? active.length + " активных HAOS-зон"
+      : "Настроить отдельные аудиовыходы";
     host.replaceChildren();
     if (!active.length) {
       host.textContent = "Сейчас нет активных HAOS-зон.";
@@ -733,27 +737,34 @@ async function setOutputMode(mode) {
   $("serverEqualizer").hidden = mode !== "server";
   $("spectrumCanvas").hidden = mode === "server";
   $("browserControls").hidden = mode === "server";
+  $("serverControls").hidden = mode !== "server";
   $("browserPause").hidden = mode !== "browser" || $("audio").paused;
   $("browserResume").hidden = mode !== "browser" || !$("audio").paused || !$("audio").src;
   $("browserStop").hidden = mode !== "browser" || !$("audio").src;
   if (mode === "browser") {
+    stopSpectrumAnimation();
     $("serverPause").hidden = true;
     $("serverResume").hidden = true;
     $("serverStop").hidden = true;
     $("volumeControl").value = String(Math.round(playbackVolume * 100));
     $("volumeValue").textContent = Math.round(playbackVolume * 100) + "%";
+    $("volumeControl").previousElementSibling.textContent = "Громкость браузера";
     $("audio").volume = playbackVolume;
     if (!$("audio").paused && !timelineFrame) timelineFrame = requestAnimationFrame(updateBrowserTimeline);
     if (!$("audio").paused) startSpectrum();
     $("outputStatus").textContent = "Браузерная зона. Потоки HAOS продолжают играть независимо.";
+    $("zoneSummaryStatus").textContent = "Браузер · HAOS-зоны продолжают играть";
     const track = currentItems[browserTrackIndex];
     if (track) $("nowPlaying").textContent = (track.artist ? track.artist + " — " : "") + (track.title || "Без названия");
     renderBrowserTimeline();
     return;
   }
 
+  $("volumeControl").previousElementSibling.textContent = "Громкость выбранной зоны";
+  stopSpectrumAnimation();
   await refreshAudioOutputs();
   $("outputStatus").textContent = "Выбрана HAOS-зона. Браузер и остальные выходы продолжают играть.";
+  $("zoneSummaryStatus").textContent = "Выбрана HAOS-зона";
   try {
     const state = await call("playback/state?output_device=" + encodeURIComponent(selectedOutputDevice));
     applyServerPlaybackState(state);

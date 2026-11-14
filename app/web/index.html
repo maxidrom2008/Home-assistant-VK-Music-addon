@@ -55,7 +55,25 @@ select{min-width:220px;max-width:100%;border:1px solid #3b4c6d;border-radius:11p
 small{display:block;color:var(--muted);margin-top:10px}
 @media(max-width:560px){body{padding:10px 8px 32px}.panel{padding:15px;border-radius:17px}#player{top:0;padding:11px;border-radius:16px}#nowPlaying{font-size:15px;margin-bottom:10px}#player .playerButtons{gap:6px}#player .playerButtons button{padding:7px 9px;font-size:12px}.trackRow{gap:8px}.trackRow button{padding:8px}.outputPicker{align-items:stretch}.outputPicker select{flex:1;min-width:0}.outputPicker button{margin:0}}
 
-#serverTimeline{margin-top:14px}
+/* The HTML hidden attribute must win over component display rules. */
+[hidden]{display:none!important}
+#serverTimeline{margin-top:10px}
+#player .playerButtons{margin-top:6px}
+#player .playerButtons button{padding:7px 10px}
+#player .toolbar{margin-bottom:4px}
+.playerVolume{display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap}
+.playerVolume label{margin:0;color:var(--muted);font-size:12px}
+.playerVolume input{width:130px;padding:0;accent-color:var(--accent)}
+.playerVolume output{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.zoneSettings{margin:-6px 0 22px;border:1px solid var(--line);border-radius:15px;background:#111a2d;overflow:hidden}
+.zoneSettings>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;list-style:none;padding:13px 16px;font-size:14px}
+.zoneSettings>summary::-webkit-details-marker{display:none}
+.zoneSettings>summary:after{content:"+";color:var(--accent);font-size:20px;line-height:1}
+.zoneSettings[open]>summary:after{content:"−"}
+.zoneSettings>summary span{color:var(--muted);font-size:12px;text-align:right}
+.zoneSettingsBody{padding:0 16px 16px;border-top:1px solid var(--line)}
+#serverEqualizer{margin-top:14px;padding:13px;border:1px solid var(--line);border-radius:12px;background:#0d1628}
+
 #serverEqualizer{margin-top:14px;padding:13px;border:1px solid var(--line);border-radius:12px;background:#0d1628}
 .eqHeader{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
 .eqHeader strong{font-size:14px}
@@ -95,15 +113,16 @@ small{display:block;color:var(--muted);margin-top:10px}
     <button id="browserOutput" type="button">Вывод в браузер</button>
     <button id="serverOutput" type="button" class="secondary">Вывод через HAOS</button>
   </div>
-  <div class="outputPicker"><label for="audioOutput">Устройство вывода HAOS</label><select id="audioOutput"><option value="default">По умолчанию</option></select><button id="refreshOutputs" class="secondary" type="button">Обновить</button></div>
-  <small id="outputNotice">Выбор зоны влияет только на новые команды для неё. Уже запущенные браузерные и HAOS-потоки не прерываются.</small>
-  <div id="activeZones" aria-live="polite">Активные HAOS-зоны появятся здесь.</div>
-  <div class="playerButtons" id="browserControls">
+  <div class="playerButtons" id="transportControls">
     <button id="previousTrack" type="button" class="secondary" aria-label="Предыдущий трек">Назад</button>
     <button id="nextTrack" type="button" class="secondary" aria-label="Следующий трек">Далее</button>
+  </div>
+  <div class="playerButtons" id="browserControls">
     <button id="browserPause" type="button" class="secondary" hidden>Пауза</button>
     <button id="browserResume" type="button" class="secondary" hidden>Продолжить</button>
     <button id="browserStop" type="button" class="danger" hidden>Стоп</button>
+  </div>
+  <div class="playerButtons" id="serverControls" hidden>
     <button id="serverPause" type="button" class="secondary" hidden>Пауза HAOS</button>
     <button id="serverResume" type="button" class="secondary" hidden>Продолжить HAOS</button>
     <button id="serverStop" type="button" class="danger" hidden>Стоп HAOS</button>
@@ -118,20 +137,35 @@ small{display:block;color:var(--muted);margin-top:10px}
     <div class="timelineTimes"><span id="serverElapsedTime">0:00</span><span id="serverTotalTime">0:00</span></div>
     <input id="serverTimelineSeek" type="range" min="0" max="1" step="1" value="0" aria-label="Перемотка трека HAOS">
   </div>
-  <section id="serverEqualizer" hidden aria-label="Эквалайзер HAOS">
-    <div class="eqHeader"><strong>Эквалайзер выбранной зоны</strong><button id="serverEqReset" type="button" class="secondary">Сбросить</button></div>
-    <div class="eqGrid">
-      <div class="eqBand"><label for="eq_bass">Бас · 60 Hz</label><input id="eq_bass" type="range" min="-12" max="12" step="1" value="0"><output id="eq_bass_value">0 dB</output></div>
-      <div class="eqBand"><label for="eq_low_mid">Низ. середина</label><input id="eq_low_mid" type="range" min="-12" max="12" step="1" value="0"><output id="eq_low_mid_value">0 dB</output></div>
-      <div class="eqBand"><label for="eq_mid">Середина · 1 kHz</label><input id="eq_mid" type="range" min="-12" max="12" step="1" value="0"><output id="eq_mid_value">0 dB</output></div>
-      <div class="eqBand"><label for="eq_high_mid">Верх. середина</label><input id="eq_high_mid" type="range" min="-12" max="12" step="1" value="0"><output id="eq_high_mid_value">0 dB</output></div>
-      <div class="eqBand"><label for="eq_treble">ВЧ · 12 kHz</label><input id="eq_treble" type="range" min="-12" max="12" step="1" value="0"><output id="eq_treble_value">0 dB</output></div>
-    </div>
-    <small>Настройки применяются только к выбранному HAOS-выходу. При изменении эквалайзера поток этой зоны аккуратно перезапускается с текущей позиции.</small>
-  </section>
-  <div style="display:flex;align-items:center;gap:10px;margin-top:10px"><label for="volumeControl">Громкость выбранной зоны</label><input id="volumeControl" type="range" min="0" max="100" value="80" style="width:130px"><output id="volumeValue">80%</output></div>
+  <div class="playerVolume">
+    <label for="volumeControl">Громкость выбранной зоны</label>
+    <input id="volumeControl" type="range" min="0" max="100" value="80">
+    <output id="volumeValue">80%</output>
+  </div>
   <audio id="audio" preload="none"></audio>
 </div>
+<details id="zoneSettings" class="zoneSettings">
+  <summary>
+    <strong>Зоны вывода и эквалайзер</strong>
+    <span id="zoneSummaryStatus">Открыть настройки аудиозон</span>
+  </summary>
+  <div class="zoneSettingsBody">
+    <div class="outputPicker"><label for="audioOutput">Устройство вывода HAOS</label><select id="audioOutput"><option value="default">По умолчанию</option></select><button id="refreshOutputs" class="secondary" type="button">Обновить</button></div>
+    <small id="outputNotice">Выбор зоны влияет только на новые команды для неё. Уже запущенные браузерные и HAOS-потоки не прерываются.</small>
+    <div id="activeZones" aria-live="polite">Активные HAOS-зоны появятся здесь.</div>
+    <section id="serverEqualizer" hidden aria-label="Эквалайзер HAOS">
+      <div class="eqHeader"><strong>Эквалайзер выбранной зоны</strong><button id="serverEqReset" type="button" class="secondary">Сбросить</button></div>
+      <div class="eqGrid">
+        <div class="eqBand"><label for="eq_bass">Бас · 60 Hz</label><input id="eq_bass" type="range" min="-12" max="12" step="1" value="0"><output id="eq_bass_value">0 dB</output></div>
+        <div class="eqBand"><label for="eq_low_mid">Низ. середина</label><input id="eq_low_mid" type="range" min="-12" max="12" step="1" value="0"><output id="eq_low_mid_value">0 dB</output></div>
+        <div class="eqBand"><label for="eq_mid">Середина · 1 kHz</label><input id="eq_mid" type="range" min="-12" max="12" step="1" value="0"><output id="eq_mid_value">0 dB</output></div>
+        <div class="eqBand"><label for="eq_high_mid">Верх. середина</label><input id="eq_high_mid" type="range" min="-12" max="12" step="1" value="0"><output id="eq_high_mid_value">0 dB</output></div>
+        <div class="eqBand"><label for="eq_treble">ВЧ · 12 kHz</label><input id="eq_treble" type="range" min="-12" max="12" step="1" value="0"><output id="eq_treble_value">0 dB</output></div>
+      </div>
+      <small>Настройки применяются только к выбранному HAOS-выходу. При изменении эквалайзера поток этой зоны аккуратно перезапускается с текущей позиции.</small>
+    </section>
+  </div>
+</details>
 <h2>Музыка</h2>
 <div class="toolbar">
   <button id="libraryButton" type="button" class="secondary">Моя музыка</button>

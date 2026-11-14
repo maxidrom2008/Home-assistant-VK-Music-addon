@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.0-rc.23
+- Compact the sticky player and move HAOS device selection, active-zone cards and equalizer into a separate collapsible section outside the sticky area.
+- Keep previous/next navigation visible in both output modes and show only the active output's pause/resume/stop controls.
+- Enforce the HTML hidden attribute so the spectrum canvas and inactive controls are actually hidden in HAOS mode.
+- Add browser regression assertions for compact layout, collapsed zone settings, hidden spectrum and independent playback continuity.
+
+
 ## 1.0.0-rc.22
 - Split HAOS playback into independent PulseAudio output zones; starting or selecting one no longer stops the browser stream or other zones.
 - Add independent per-zone timeline seeking, volume and a five-band FFmpeg equalizer; seeking and EQ changes restart only the targeted zone at its current position.
