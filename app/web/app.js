@@ -734,6 +734,8 @@ async function setOutputMode(mode) {
   $("serverOutput").className = mode === "server" ? "" : "secondary";
   $("browserTimeline").hidden = mode !== "browser" || !currentBrowserTrackId;
   $("serverTimeline").hidden = mode !== "server";
+  $("playerOutputPicker").hidden = mode !== "server";
+  $("zoneSettings").open = mode === "server";
   $("serverEqualizer").hidden = mode !== "server";
   $("spectrumCanvas").hidden = mode === "server";
   $("browserControls").hidden = mode === "server";
