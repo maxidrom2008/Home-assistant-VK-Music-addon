@@ -313,6 +313,8 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
     assert.equal(spectrumProbe.resumeCalls, 1,
       "simulate a browser that refuses to resume the optional analysis context");
     const spectrum = window.document.getElementById("spectrumCanvas");
+    assert.equal(spectrum.hidden, true,
+      "a blocked analysis context hides only the optional visualizer");
     assert.ok(spectrum, "player includes a spectrum visualizer");
     assert.equal(spectrum.dataset.bands, "12");
     assert.equal(spectrum.dataset.minFrequency, "50");
