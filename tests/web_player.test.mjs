@@ -304,6 +304,18 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
     assert.equal(window.document.getElementById("browserTimeline").hidden, true);
     assert.equal(window.document.getElementById("serverTimeline").hidden, false);
     assert.equal(window.document.getElementById("serverEqualizer").hidden, false);
+    assert.equal(window.document.getElementById("spectrumCanvas").hidden, true);
+    assert.equal(window.getComputedStyle(window.document.getElementById("spectrumCanvas")).display, "none",
+      "the spectrum canvas must be visually hidden in HAOS mode");
+    assert.equal(window.document.getElementById("browserControls").hidden, true);
+    assert.equal(window.document.getElementById("serverControls").hidden, false);
+    assert.equal(window.document.getElementById("transportControls").hidden, false);
+    assert.equal(window.document.getElementById("player").contains(window.document.getElementById("zoneSettings")), false,
+      "expanded zone settings must never enlarge the sticky player");
+    assert.equal(window.document.getElementById("player").contains(window.document.getElementById("serverEqualizer")), false,
+      "equalizer must stay outside the sticky player");
+    assert.equal(window.document.getElementById("zoneSettings").open, false,
+      "zone settings start collapsed");
     assert.equal(paused, false, "switching to HAOS must not stop the browser stream");
     assert.ok(audio.src.includes("start=75.000"), "browser source URL must stay attached");
     assert.equal(calls.some((call) => call.path === "playback/server/stop"), false);
