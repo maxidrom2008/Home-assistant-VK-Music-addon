@@ -134,6 +134,14 @@ test("production browser player keeps decoded audio audible when Web Audio is su
       window.__audioSmoke = { mediaElementSourceCalls: 0, resumeCalls: 0 };
       if (NativeAudioContext) {
         window.AudioContext = class extends NativeAudioContext {
+          constructor(...args) {
+            super(...args);
+            // Force the exact browser state that used to silence native media.
+            Object.defineProperty(this, "state", {
+              configurable: true,
+              get: () => "suspended",
+            });
+          }
           createMediaElementSource(...args) {
             window.__audioSmoke.mediaElementSourceCalls += 1;
             return super.createMediaElementSource(...args);
