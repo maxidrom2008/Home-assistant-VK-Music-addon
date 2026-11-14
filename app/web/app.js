@@ -160,6 +160,10 @@ function startSpectrum() {
       // The analyser is intentionally not connected to AudioContext.destination.
       spectrumCanvasContext = canvas.getContext("2d");
     }
+    if (!spectrumCanvasContext) {
+      canvas.hidden = true;
+      return;
+    }
     canvas.hidden = false;
     if (spectrumContext.state === "suspended") {
       spectrumContext.resume().catch(() => {
