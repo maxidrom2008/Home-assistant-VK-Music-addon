@@ -2,7 +2,7 @@
 
 Standalone VK Music server for Home Assistant OS with a companion Home Assistant `media_player` integration. It runs independently of Music Assistant and does not modify or replace the legacy Music Assistant VK Edition add-on.
 
-**Current release candidate: `1.0.0-rc.23`.** This is a pre-release. CI validates the code, browser bundle and multi-architecture images, but real VK authorization, audible output and hardware-specific playback still require acceptance testing on the target Home Assistant installation.
+**Current release candidate: `1.0.0-rc.24`.** This is a pre-release. CI validates the code, browser bundle and multi-architecture images, but real VK authorization, audible output and hardware-specific playback still require acceptance testing on the target Home Assistant installation.
 
 ## Features
 
@@ -26,9 +26,9 @@ Standalone VK Music server for Home Assistant OS with a companion Home Assistant
 3. Install **VK Music Server** from the Apps store.
 4. Open its Ingress panel and sign in with your VK phone/email and password.
 5. Complete any CAPTCHA or verification challenge requested by VK.
-6. Choose the browser zone or an HAOS output in the player. To run several streams at once, start a track in one HAOS output, select another output and start a different track; previous zones and browser playback keep playing. Seek and EQ are controlled independently for the selected HAOS output.
+6. Choose **Вывод через HAOS**. The output-device selector appears directly in the player; pick a speaker and start a track. To run several streams at once, start a track on speaker A, choose speaker B and start another track. Switch back to **Вывод в браузер** without stopping the already playing zones. Seek, volume and EQ are controlled for the selected HAOS output.
 
-The app publishes images to `ghcr.io/maxidrom2008/vk-music-server` for `amd64` and `aarch64`. CI builds and validates both architectures before the multi-architecture image is published from `main).
+The app publishes images to `ghcr.io/maxidrom2008/vk-music-server` for `amd64` and `aarch64`. CI builds and validates both architectures before publishing the multi-architecture image from `main`.
 
 ## Install the Home Assistant media_player integration
 
@@ -106,7 +106,7 @@ The API is restricted to Home Assistant Core, Supervisor/Ingress and loopback. O
 
 - VK audio availability depends on the account and VK API access rules. CAPTCHA appearance and verification methods are controlled by VK.
 - Audible server-side playback depends on HAOS exposing a working PulseAudio sink and the selected device being available to the add-on.
-- Browser and server playback are separate output modes.
+- Browser and each HAOS output are independent playback zones. Choosing which zone to control does not stop any playing stream.
 - A native Home Assistant mobile app is not included.
 
 ## Local development
