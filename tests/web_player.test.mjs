@@ -183,6 +183,56 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
   window.fetch = fakeFetch;
 
   const audio = window.document.getElementById("audio");
+  const spectrumProbe = {
+    captureStreamCalls: 0,
+    mediaStreamSourceCalls: 0,
+    mediaElementSourceCalls: 0,
+    sourceConnectedToAnalyser: false,
+    analyserConnectedToDestination: 0,
+    resumeCalls: 0,
+  };
+  const capturedAudio = { getAudioTracks: () => [{ kind: "audio" }] };
+  class TestAudioContext {
+    constructor() {
+      this.state = "suspended";
+      this.destination = {};
+    }
+    createAnalyser() {
+      return {
+        fftSize: 0,
+        frequencyBinCount: 4096,
+        minDecibels: -100,
+        maxDecibels: -20,
+        smoothingTimeConstant: 0,
+        getFloatFrequencyData() {},
+        connect() { spectrumProbe.analyserConnectedToDestination += 1; },
+      };
+    }
+    createMediaStreamSource(stream) {
+      assert.equal(stream, capturedAudio);
+      spectrumProbe.mediaStreamSourceCalls += 1;
+      return { connect: () => { spectrumProbe.sourceConnectedToAnalyser = true; } };
+    }
+    createMediaElementSource() {
+      spectrumProbe.mediaElementSourceCalls += 1;
+      throw new Error("MediaElementAudioSourceNode must not intercept native playback");
+    }
+    resume() {
+      spectrumProbe.resumeCalls += 1;
+      return Promise.reject(new Error("Simulated autoplay policy blocks Web Audio"));
+    }
+  }
+  window.AudioContext = TestAudioContext;
+  audio.captureStream = () => {
+    spectrumProbe.captureStreamCalls += 1;
+    return capturedAudio;
+  };
+  const canvasContext = {
+    setTransform() {},
+    clearRect() {},
+    fillRect() {},
+  };
+  window.document.getElementById("spectrumCanvas").getContext = () => canvasContext;
   let paused = true;
   let ended = false;
   let currentTime = 0;
@@ -257,7 +307,21 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
       "browser player track title",
     );
     assert.equal(paused, false);
+    assert.equal(audio.volume, 0.8, "browser audio volume remains independent of the visualizer");
     const spectrum = window.document.getElementById("spectrumCanvas");
+    await waitFor(() => spectrumProbe.resumeCalls === 1 && spectrum.hidden,
+      "a rejected Web Audio resume hides the analyzer without muting native media");
+    assert.equal(spectrumProbe.captureStreamCalls, 1, "spectrum reads a parallel media capture stream");
+    assert.equal(spectrumProbe.mediaStreamSourceCalls, 1, "spectrum uses MediaStreamSource");
+    assert.equal(spectrumProbe.mediaElementSourceCalls, 0,
+      "spectrum must never reroute native audio through MediaElementAudioSourceNode");
+    assert.equal(spectrumProbe.sourceConnectedToAnalyser, true);
+    assert.equal(spectrumProbe.analyserConnectedToDestination, 0,
+      "the analyser must not become a gate in the audible output route");
+    assert.equal(spectrumProbe.resumeCalls, 1,
+      "simulate a browser that refuses to resume the optional analysis context");
+    assert.equal(spectrum.hidden, true,
+      "a blocked analysis context hides only the optional visualizer");
     assert.ok(spectrum, "player includes a spectrum visualizer");
     assert.equal(spectrum.dataset.bands, "12");
     assert.equal(spectrum.dataset.minFrequency, "50");
@@ -271,6 +335,9 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
     assert.equal(window.document.querySelectorAll("#player .playerButtons").length, 3);
     assert.ok(appJs.includes("spectrumAnalyser.fftSize = 8192"));
     assert.ok(appJs.includes("SPECTRUM_HIGH_SHELF_DB = 2"));
+    assert.ok(appJs.includes("audio.captureStream || audio.mozCaptureStream || audio.webkitCaptureStream"));
+    assert.equal(appJs.includes("createMediaElementSource"), true,
+      "source code documents why the native media element route is not intercepted");
     assert.ok(appJs.includes("SPECTRUM_GAIN_DB = 0"));
     assert.ok(appJs.includes("const segmentCount = 14"));
     assert.ok(appJs.includes("segmentColors"));
@@ -389,9 +456,14 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
     assert.equal(serverZones.get("selected_sink").state, "playing");
     assert.equal(paused, false, "switching outputs must not stop browser playback");
 
+    // Browsers without captureStream (for example Safari) must retain native audio.
+    audio.captureStream = undefined;
     window.document.getElementById("browserOutput").click();
     await waitFor(() => outputPicker.hidden, "hide HAOS picker only when browser controls are selected");
     assert.equal(paused, false, "switching back to browser must not stop browser playback");
+    assert.equal(window.document.getElementById("spectrumCanvas").hidden, true,
+      "unsupported spectrum capture hides only the visualizer, never the audio player");
+    assert.equal(audio.volume, 0.8, "native browser audio volume remains unchanged without spectrum support");
     assert.equal(serverZones.get("default").state, "playing", "switching modes must not stop HAOS zone A");
     assert.equal(serverZones.get("selected_sink").state, "playing", "switching modes must not stop HAOS zone B");
     assert.ok(appJs.includes("playback/server/seek"));

@@ -12,7 +12,8 @@ permissions:
 jobs:
   test:
     name: Python, API and browser checks
-    runs-on: ubuntu-latest
+    # Pin the browser-test runner to an Ubuntu release supported by Playwright.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -37,6 +38,11 @@ jobs:
         run: |
           node --check app/web/app.js
           node --check app/web/app.bundle.js
+      - name: Install Chromium for native media playback smoke test
+        working-directory: app/web
+        run: npx playwright install --with-deps chromium
+      - name: Run real Chromium audio playback test
+        run: node --test tests/browser_audio_smoke.test.mjs
       - name: Run browser DOM tests
         run: node --test tests/web_player.test.mjs
       - name: Run tests

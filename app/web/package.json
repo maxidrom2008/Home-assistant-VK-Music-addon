@@ -1,6 +1,6 @@
 {
   "name": "vk-music-server-web",
-  "version": "1.0.0-rc.24",
+  "version": "1.0.0-rc.25",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,6 +12,7 @@
   },
   "devDependencies": {
     "esbuild": "0.25.12",
-    "jsdom": "26.1.0"
+    "jsdom": "26.1.0",
+    "playwright": "1.56.1"
   }
 }
