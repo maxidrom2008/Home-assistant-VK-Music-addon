@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.0-rc.24
+- Restore the HAOS output-device selector directly in the visible player whenever HAOS mode is selected; it is no longer buried inside collapsed advanced settings.
+- Automatically expose active output zones and the equalizer on entering HAOS mode, while keeping the browser player compact in browser mode.
+- Strengthen browser regression checks to verify actual selector visibility, sink selection, and uninterrupted browser plus multi-output playback when switching modes.
+
 ## 1.0.0-rc.23
 - Compact the sticky player and move HAOS device selection, active-zone cards and equalizer into a separate collapsible section outside the sticky area.
 - Keep previous/next navigation visible in both output modes and show only the active output's pause/resume/stop controls.

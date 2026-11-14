@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
+from urllib.parse import quote
 from typing import Any
 
 from homeassistant.components.media_player import (
@@ -125,7 +126,10 @@ class VKMusicServerMediaPlayer(MediaPlayerEntity):
     async def async_update(self) -> None:
         """Refresh server playback state."""
         try:
-            data = await self.api.get("playback/state")
+            # This entity owns one selected HAOS zone. Do not follow the
+            # add-on UI's global selector when polling the entity state.
+            device = quote(self._output_device, safe="")
+            data = await self.api.get(f"playback/state?output_device={device}")
         except VKMusicServerApiError as exc:
             self._connected = False
             self._error = str(exc)
