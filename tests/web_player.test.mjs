@@ -260,7 +260,7 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
     assert.equal(spectrum.dataset.segments, "14");
     assert.ok(html.includes("#player{position:sticky;top:0"));
     assert.ok(html.includes("#player .playerButtons{margin-top:10px;flex-wrap:nowrap"));
-    assert.equal(window.document.querySelectorAll("#player .playerButtons").length, 1);
+    assert.equal(window.document.querySelectorAll("#player .playerButtons").length, 3);
     assert.ok(appJs.includes("spectrumAnalyser.fftSize = 8192"));
     assert.ok(appJs.includes("SPECTRUM_HIGH_SHELF_DB = 2"));
     assert.ok(appJs.includes("SPECTRUM_GAIN_DB = 0"));
