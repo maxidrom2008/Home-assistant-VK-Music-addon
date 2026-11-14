@@ -242,6 +242,14 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
       "the connected library track",
     );
     assert.equal(window.document.getElementById("status").textContent.includes("VK подключён"), true);
+    const player = window.document.getElementById("player");
+    const outputPicker = window.document.getElementById("playerOutputPicker");
+    const outputSelect = window.document.getElementById("audioOutput");
+    const zoneSettings = window.document.getElementById("zoneSettings");
+    assert.equal(outputPicker.hidden, true, "HAOS selector is not shown in browser mode");
+    assert.equal(player.contains(outputSelect), true, "device selector belongs to the main player");
+    assert.equal(zoneSettings.contains(outputSelect), false,
+      "device selection must not be hidden inside the collapsed advanced settings");
 
     window.document.querySelector("#trackList button").click();
     await waitFor(
@@ -303,6 +311,11 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
     );
     assert.equal(window.document.getElementById("browserTimeline").hidden, true);
     assert.equal(window.document.getElementById("serverTimeline").hidden, false);
+    assert.equal(outputPicker.hidden, false, "HAOS mode must expose the device picker");
+    assert.equal(window.getComputedStyle(outputPicker).display, "flex",
+      "the HAOS device picker must be visually rendered");
+    assert.equal(outputSelect.options.length, 2, "the available PulseAudio devices must be selectable");
+    assert.equal(zoneSettings.open, true, "advanced zone controls expand when HAOS mode is selected");
     assert.equal(window.document.getElementById("serverEqualizer").hidden, false);
     assert.equal(window.document.getElementById("spectrumCanvas").hidden, true);
     assert.equal(window.getComputedStyle(window.document.getElementById("spectrumCanvas")).display, "none",
@@ -314,8 +327,8 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
       "expanded zone settings must never enlarge the sticky player");
     assert.equal(window.document.getElementById("player").contains(window.document.getElementById("serverEqualizer")), false,
       "equalizer must stay outside the sticky player");
-    assert.equal(window.document.getElementById("zoneSettings").open, false,
-      "zone settings start collapsed");
+    assert.equal(zoneSettings.open, true,
+      "HAOS mode exposes active zones and the equalizer without an extra click");
     assert.equal(paused, false, "switching to HAOS must not stop the browser stream");
     assert.ok(audio.src.includes("start=75.000"), "browser source URL must stay attached");
     assert.equal(calls.some((call) => call.path === "playback/server/stop"), false);
@@ -373,7 +386,14 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
     );
     assert.equal(serverZones.has("default"), true, "first HAOS zone remains active");
     assert.equal(serverZones.get("default").state, "playing");
+    assert.equal(serverZones.get("selected_sink").state, "playing");
     assert.equal(paused, false, "switching outputs must not stop browser playback");
+
+    window.document.getElementById("browserOutput").click();
+    await waitFor(() => outputPicker.hidden, "hide HAOS picker only when browser controls are selected");
+    assert.equal(paused, false, "switching back to browser must not stop browser playback");
+    assert.equal(serverZones.get("default").state, "playing", "switching modes must not stop HAOS zone A");
+    assert.equal(serverZones.get("selected_sink").state, "playing", "switching modes must not stop HAOS zone B");
     assert.ok(appJs.includes("playback/server/seek"));
     assert.ok(appJs.includes("playback/server/equalizer"));
   } finally {
