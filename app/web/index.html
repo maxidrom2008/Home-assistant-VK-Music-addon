@@ -34,6 +34,9 @@ button:disabled{opacity:.5;cursor:wait}
 #nowPlaying{font-size:17px;font-weight:750;line-height:1.35;margin-bottom:14px;overflow-wrap:anywhere}
 #player .toolbar{padding:4px;background:#0d1628;border:1px solid #293754;border-radius:14px;width:max-content;max-width:100%}
 #player .toolbar button{margin:0;padding:9px 14px;border-radius:10px}
+#player .outputPicker{margin:10px 0 4px;padding:9px 10px;border:1px solid #293754;border-radius:12px;background:#0d1628}
+#player .outputPicker select{flex:1;min-width:150px}
+#player .outputPicker button{margin:0;padding:9px 12px}
 #player .playerButtons{margin-top:10px;flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-inline:contain;scrollbar-width:thin;padding-bottom:2px}
 #player .playerButtons button{flex:0 0 auto;margin:0;padding:8px 11px;font-size:13px;white-space:nowrap}
 .outputPicker{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}
@@ -113,6 +116,11 @@ small{display:block;color:var(--muted);margin-top:10px}
     <button id="browserOutput" type="button">Вывод в браузер</button>
     <button id="serverOutput" type="button" class="secondary">Вывод через HAOS</button>
   </div>
+  <div class="outputPicker" id="playerOutputPicker" hidden>
+    <label for="audioOutput">Аудиовыход HAOS</label>
+    <select id="audioOutput"><option value="default">По умолчанию</option></select>
+    <button id="refreshOutputs" class="secondary" type="button">Обновить список</button>
+  </div>
   <div class="playerButtons" id="transportControls">
     <button id="previousTrack" type="button" class="secondary" aria-label="Предыдущий трек">Назад</button>
     <button id="nextTrack" type="button" class="secondary" aria-label="Следующий трек">Далее</button>
@@ -146,11 +154,10 @@ small{display:block;color:var(--muted);margin-top:10px}
 </div>
 <details id="zoneSettings" class="zoneSettings">
   <summary>
-    <strong>Зоны вывода и эквалайзер</strong>
+    <strong>Активные зоны и эквалайзер</strong>
     <span id="zoneSummaryStatus">Открыть настройки аудиозон</span>
   </summary>
   <div class="zoneSettingsBody">
-    <div class="outputPicker"><label for="audioOutput">Устройство вывода HAOS</label><select id="audioOutput"><option value="default">По умолчанию</option></select><button id="refreshOutputs" class="secondary" type="button">Обновить</button></div>
     <small id="outputNotice">Выбор зоны влияет только на новые команды для неё. Уже запущенные браузерные и HAOS-потоки не прерываются.</small>
     <div id="activeZones" aria-live="polite">Активные HAOS-зоны появятся здесь.</div>
     <section id="serverEqualizer" hidden aria-label="Эквалайзер HAOS">
