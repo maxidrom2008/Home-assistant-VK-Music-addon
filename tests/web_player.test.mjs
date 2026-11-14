@@ -183,6 +183,51 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
   window.fetch = fakeFetch;
 
   const audio = window.document.getElementById("audio");
+  const spectrumProbe = {
+    captureStreamCalls: 0,
+    mediaStreamSourceCalls: 0,
+    mediaElementSourceCalls: 0,
+    sourceConnectedToAnalyser: false,
+    analyserConnectedToDestination: 0,
+    resumeCalls: 0,
+  };
+  const capturedAudio = { getAudioTracks: () => [{ kind: "audio" }] };
+  class TestAudioContext {
+    constructor() {
+      this.state = "suspended";
+      this.destination = {};
+    }
+    createAnalyser() {
+      return {
+        fftSize: 0,
+        frequencyBinCount: 4096,
+        minDecibels: -100,
+        maxDecibels: -20,
+        smoothingTimeConstant: 0,
+        getFloatFrequencyData() {},
+        connect() { spectrumProbe.analyserConnectedToDestination += 1; },
+      };
+    }
+    createMediaStreamSource(stream) {
+      assert.equal(stream, capturedAudio);
+      spectrumProbe.mediaStreamSourceCalls += 1;
+      return { connect: () => { spectrumProbe.sourceConnectedToAnalyser = true; } };
+    }
+    createMediaElementSource() {
+      spectrumProbe.mediaElementSourceCalls += 1;
+      throw new Error("MediaElementAudioSourceNode must not intercept native playback");
+    }
+    resume() {
+      spectrumProbe.resumeCalls += 1;
+      return Promise.reject(new Error("Simulated autoplay policy blocks Web Audio"));
+    }
+  }
+  window.AudioContext = TestAudioContext;
+  audio.captureStream = () => {
+    spectrumProbe.captureStreamCalls += 1;
+    return capturedAudio;
+  };
+  window.document.getElementById("spectrumCanvas").getContext = () => null;
   let paused = true;
   let ended = false;
   let currentTime = 0;
@@ -257,6 +302,16 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
       "browser player track title",
     );
     assert.equal(paused, false);
+    assert.equal(audio.volume, 0.8, "browser audio volume remains independent of the visualizer");
+    assert.equal(spectrumProbe.captureStreamCalls, 1, "spectrum reads a parallel media capture stream");
+    assert.equal(spectrumProbe.mediaStreamSourceCalls, 1, "spectrum uses MediaStreamSource");
+    assert.equal(spectrumProbe.mediaElementSourceCalls, 0,
+      "spectrum must never reroute native audio through MediaElementAudioSourceNode");
+    assert.equal(spectrumProbe.sourceConnectedToAnalyser, true);
+    assert.equal(spectrumProbe.analyserConnectedToDestination, 0,
+      "the analyser must not become a gate in the audible output route");
+    assert.equal(spectrumProbe.resumeCalls, 1,
+      "simulate a browser that refuses to resume the optional analysis context");
     const spectrum = window.document.getElementById("spectrumCanvas");
     assert.ok(spectrum, "player includes a spectrum visualizer");
     assert.equal(spectrum.dataset.bands, "12");
@@ -271,6 +326,9 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
     assert.equal(window.document.querySelectorAll("#player .playerButtons").length, 3);
     assert.ok(appJs.includes("spectrumAnalyser.fftSize = 8192"));
     assert.ok(appJs.includes("SPECTRUM_HIGH_SHELF_DB = 2"));
+    assert.ok(appJs.includes("audio.captureStream || audio.mozCaptureStream || audio.webkitCaptureStream"));
+    assert.equal(appJs.includes("createMediaElementSource"), true,
+      "source code documents why the native media element route is not intercepted");
     assert.ok(appJs.includes("SPECTRUM_GAIN_DB = 0"));
     assert.ok(appJs.includes("const segmentCount = 14"));
     assert.ok(appJs.includes("segmentColors"));
