@@ -119,12 +119,32 @@ function drawSpectrum() {
   spectrumFrame = requestAnimationFrame(drawSpectrum);
 }
 
+function spectrumCaptureSupported() {
+  const audio = $("audio");
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  const captureStream = audio.captureStream || audio.mozCaptureStream || audio.webkitCaptureStream;
+  return Boolean(AudioContextClass && typeof captureStream === "function");
+}
+
 function startSpectrum() {
   if (outputMode !== "browser") return;
+  const audio = $("audio");
+  const canvas = $("spectrumCanvas");
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextClass) return;
+  const captureStream = audio.captureStream || audio.mozCaptureStream || audio.webkitCaptureStream;
+  if (!AudioContextClass || typeof captureStream !== "function") {
+    // The visualizer is optional. Never put native media playback behind Web Audio.
+    stopSpectrumAnimation();
+    canvas.hidden = true;
+    return;
+  }
   try {
     if (!spectrumContext) {
+      const capturedAudio = captureStream.call(audio);
+      if (!capturedAudio || !capturedAudio.getAudioTracks?.().length) {
+        canvas.hidden = true;
+        return;
+      }
       spectrumContext = new AudioContextClass();
       spectrumAnalyser = spectrumContext.createAnalyser();
       spectrumAnalyser.fftSize = 8192;
@@ -132,16 +152,27 @@ function startSpectrum() {
       spectrumAnalyser.maxDecibels = -20;
       spectrumAnalyser.smoothingTimeConstant = 0.68;
       spectrumData = new Float32Array(spectrumAnalyser.frequencyBinCount);
-      spectrumSource = spectrumContext.createMediaElementSource($("audio"));
+      // Read a parallel capture stream. Do NOT use createMediaElementSource():
+      // that API replaces the element's native output route and a suspended
+      // AudioContext can make an otherwise-playing <audio> element silent.
+      spectrumSource = spectrumContext.createMediaStreamSource(capturedAudio);
       spectrumSource.connect(spectrumAnalyser);
-      spectrumAnalyser.connect(spectrumContext.destination);
-      spectrumCanvasContext = $("spectrumCanvas").getContext("2d");
+      // The analyser is intentionally not connected to AudioContext.destination.
+      spectrumCanvasContext = canvas.getContext("2d");
     }
-    if (spectrumContext.state === "suspended") spectrumContext.resume().catch(() => {});
+    canvas.hidden = false;
+    if (spectrumContext.state === "suspended") {
+      spectrumContext.resume().catch(() => {
+        // A blocked analyser must not affect the native <audio> output.
+        stopSpectrumAnimation();
+        canvas.hidden = true;
+      });
+    }
     if (!spectrumFrame && spectrumCanvasContext) spectrumFrame = requestAnimationFrame(drawSpectrum);
   } catch (err) {
-    // Playback must continue normally if Web Audio or canvas analysis is unavailable.
+    // Playback must continue normally if capture, Web Audio or canvas analysis is unavailable.
     stopSpectrumAnimation();
+    canvas.hidden = true;
   }
 }
 
@@ -737,7 +768,7 @@ async function setOutputMode(mode) {
   $("playerOutputPicker").hidden = mode !== "server";
   $("zoneSettings").open = mode === "server";
   $("serverEqualizer").hidden = mode !== "server";
-  $("spectrumCanvas").hidden = mode === "server";
+  $("spectrumCanvas").hidden = mode === "server" || !spectrumCaptureSupported();
   $("browserControls").hidden = mode === "server";
   $("serverControls").hidden = mode !== "server";
   $("browserPause").hidden = mode !== "browser" || $("audio").paused;
@@ -1074,6 +1105,7 @@ $("volumeControl").addEventListener("input", async e => {
 $("audioOutput").addEventListener("change", event => setAudioOutput(event.target.value));
 $("refreshOutputs").addEventListener("click", refreshAudioOutputs);
 $("audio").addEventListener("play", () => { $("browserPause").hidden = false; $("browserResume").hidden = true; $("browserStop").hidden = false; if (outputMode === "browser" && !timelineFrame) timelineFrame = requestAnimationFrame(updateBrowserTimeline); startSpectrum(); });
+$("audio").addEventListener("playing", startSpectrum);
 $("audio").addEventListener("timeupdate", () => { if (outputMode === "browser" && !timelineSeeking) renderBrowserTimeline(); });
 $("audio").addEventListener("loadedmetadata", () => {
   const duration = $("audio").duration;
