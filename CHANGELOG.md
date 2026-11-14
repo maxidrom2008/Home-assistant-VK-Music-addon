@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.0-rc.25
+- Fix silent browser playback caused by routing the audio element through a potentially suspended Web Audio context for spectrum analysis.
+- Move spectrum analysis to a separate `captureStream()` / `MediaStreamAudioSourceNode` branch; never intercept or gate the native media-element output.
+- Hide only the optional visualizer when capture-stream/Web Audio is unavailable or autoplay policy blocks the analysis context; browser audio continues normally.
+- Add a regression test that simulates a suspended/rejected AudioContext and browsers without capture-stream support.
+
 ## 1.0.0-rc.24
 - Restore the HAOS output-device selector directly in the visible player whenever HAOS mode is selected; it is no longer buried inside collapsed advanced settings.
 - Automatically expose active output zones and the equalizer on entering HAOS mode, while keeping the browser player compact in browser mode.
