@@ -217,3 +217,10 @@ def test_python_runtime_lock_covers_direct_dependencies_and_is_used() -> None:
     assert "pip install -r requirements-dev.txt" in Path(
         ".github/workflows/validate.yml"
     ).read_text(encoding="utf-8")
+
+def test_home_assistant_media_player_polls_its_own_selected_output() -> None:
+    from pathlib import Path
+
+    source = Path("custom_components/vk_music_server/media_player.py").read_text(encoding="utf-8")
+    assert "device = quote(self._output_device, safe=\"\")" in source
+    assert "playback/state?output_device={device}" in source
