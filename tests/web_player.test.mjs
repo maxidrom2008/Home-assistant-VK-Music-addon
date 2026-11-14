@@ -447,9 +447,14 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
     assert.equal(serverZones.get("selected_sink").state, "playing");
     assert.equal(paused, false, "switching outputs must not stop browser playback");
 
+    // Browsers without captureStream (for example Safari) must retain native audio.
+    audio.captureStream = undefined;
     window.document.getElementById("browserOutput").click();
     await waitFor(() => outputPicker.hidden, "hide HAOS picker only when browser controls are selected");
     assert.equal(paused, false, "switching back to browser must not stop browser playback");
+    assert.equal(window.document.getElementById("spectrumCanvas").hidden, true,
+      "unsupported spectrum capture hides only the visualizer, never the audio player");
+    assert.equal(audio.volume, 0.8, "native browser audio volume remains unchanged without spectrum support");
     assert.equal(serverZones.get("default").state, "playing", "switching modes must not stop HAOS zone A");
     assert.equal(serverZones.get("selected_sink").state, "playing", "switching modes must not stop HAOS zone B");
     assert.ok(appJs.includes("playback/server/seek"));
