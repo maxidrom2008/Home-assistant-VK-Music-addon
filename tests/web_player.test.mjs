@@ -227,7 +227,12 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
     spectrumProbe.captureStreamCalls += 1;
     return capturedAudio;
   };
-  window.document.getElementById("spectrumCanvas").getContext = () => null;
+  const canvasContext = {
+    setTransform() {},
+    clearRect() {},
+    fillRect() {},
+  };
+  window.document.getElementById("spectrumCanvas").getContext = () => canvasContext;
   let paused = true;
   let ended = false;
   let currentTime = 0;
@@ -303,6 +308,9 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
     );
     assert.equal(paused, false);
     assert.equal(audio.volume, 0.8, "browser audio volume remains independent of the visualizer");
+    const spectrum = window.document.getElementById("spectrumCanvas");
+    await waitFor(() => spectrumProbe.resumeCalls === 1 && spectrum.hidden,
+      "a rejected Web Audio resume hides the analyzer without muting native media");
     assert.equal(spectrumProbe.captureStreamCalls, 1, "spectrum reads a parallel media capture stream");
     assert.equal(spectrumProbe.mediaStreamSourceCalls, 1, "spectrum uses MediaStreamSource");
     assert.equal(spectrumProbe.mediaElementSourceCalls, 0,
@@ -312,7 +320,6 @@ test("browser player loads, plays, seeks and switches to HAOS playback", async (
       "the analyser must not become a gate in the audible output route");
     assert.equal(spectrumProbe.resumeCalls, 1,
       "simulate a browser that refuses to resume the optional analysis context");
-    const spectrum = window.document.getElementById("spectrumCanvas");
     assert.equal(spectrum.hidden, true,
       "a blocked analysis context hides only the optional visualizer");
     assert.ok(spectrum, "player includes a spectrum visualizer");
