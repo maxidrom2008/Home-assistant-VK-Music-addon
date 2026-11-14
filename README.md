@@ -2,7 +2,7 @@
 
 Standalone VK Music server for Home Assistant OS with a companion Home Assistant `media_player` integration. It runs independently of Music Assistant and does not modify or replace the legacy Music Assistant VK Edition add-on.
 
-**Current release candidate: `1.0.0-rc.24`.** This is a pre-release. CI validates the code, browser bundle and multi-architecture images, but real VK authorization, audible output and hardware-specific playback still require acceptance testing on the target Home Assistant installation.
+**Current release candidate: `1.0.0-rc.25`.** This is a pre-release. CI validates the code, browser bundle and multi-architecture images, but real VK authorization, audible output and hardware-specific playback still require acceptance testing on the target Home Assistant installation.
 
 ## Features
 
@@ -10,6 +10,7 @@ Standalone VK Music server for Home Assistant OS with a companion Home Assistant
 - Persistent VK access-token storage under `/data`; passwords and one-time challenge data are held in memory only.
 - Personal audio library, playlists, playlist tracks, text search and pagination.
 - Browser playback uses a server-side HLS proxy with HLS.js (native HLS where available); signed VK CDN URLs, encryption-key URLs and private playlist access keys remain server-side. FFmpeg transcoding remains available as a compatibility fallback. HLS seeks are handled by the browser media pipeline without restarting FFmpeg.
+- The spectrum visualizer reads a parallel audio capture stream and never intercepts the browser's native audio output; browsers without capture-stream support retain normal sound playback with the analyzer hidden.
 - Browser controls: play, pause, resume, stop, previous/next, volume and seek. The server reuses the signed VK stream URL while seeking and asks FFmpeg to seek in the source before transcoding, avoiding a fresh VK API lookup and full decode from the beginning for each seek.
 - Independent playback zones: browser audio and each selected HAOS/PulseAudio output run separately, so switching the control panel or starting another zone never stops existing streams.
 - HAOS controls include per-output seek, volume, pause/resume and a five-band FFmpeg equalizer; only the selected zone restarts when seeking or changing its EQ.
